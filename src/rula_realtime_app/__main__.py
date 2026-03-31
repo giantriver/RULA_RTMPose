@@ -31,9 +31,9 @@ def main():
         '-c',
         '--camera-mode',
         type=str,
-        choices=['WEBCAM', 'KINECT', 'KINECT_RGB'],
+        choices=['WEBCAM', 'KINECT', 'KINECT_RGB', 'RTMW3D'],
         default=config.CAMERA_MODE,
-        help='相機模式: WEBCAM, KINECT, 或 KINECT_RGB'
+        help='相機模式: WEBCAM, KINECT, KINECT_RGB, 或 RTMW3D'
     )
     args = parser.parse_args()
     

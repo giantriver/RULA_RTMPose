@@ -32,7 +32,26 @@ class RULAConfigDialog(QDialog):
         self.title_label = QLabel(t('config_subtitle'))
         self.title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #3498db; margin-bottom: 10px;")
         layout.addWidget(self.title_label)
-        
+
+        # 語言選擇
+        language_layout = QHBoxLayout()
+        self.language_label = QLabel(t('config_language'))
+        self.language_label.setStyleSheet("font-weight: bold; color: #ecf0f1;")
+
+        self.language_combo = QComboBox()
+        self.language_codes = ['zh_TW', 'en']
+        for lang_code in self.language_codes:
+            self.language_combo.addItem(t('lang_chinese') if lang_code == 'zh_TW' else t('lang_english'), lang_code)
+
+        current_lang = self.lang.get_language()
+        current_lang_index = self.language_combo.findData(current_lang)
+        if current_lang_index >= 0:
+            self.language_combo.setCurrentIndex(current_lang_index)
+
+        language_layout.addWidget(self.language_label)
+        language_layout.addWidget(self.language_combo)
+        layout.addLayout(language_layout)
+
         # 參數網格
         grid_layout = QGridLayout()
         grid_layout.setSpacing(12)
@@ -120,9 +139,19 @@ class RULAConfigDialog(QDialog):
         """語言改變時更新對話框文本"""
         self.setWindowTitle(t('config_title'))
         self.title_label.setText(t('config_subtitle'))
+        self.language_label.setText(t('config_language'))
         self.save_button.setText(t('config_save'))
         self.close_button.setText(t('config_cancel'))
-        
+
+        # 更新語言下拉選單顯示文字，保留目前選中的語言代碼
+        selected_lang = self.language_combo.currentData()
+        self.language_combo.clear()
+        for code in self.language_codes:
+            self.language_combo.addItem(t('lang_chinese') if code == 'zh_TW' else t('lang_english'), code)
+        selected_index = self.language_combo.findData(selected_lang)
+        if selected_index >= 0:
+            self.language_combo.setCurrentIndex(selected_index)
+
         # 更新參數名稱標籤
         for param_key, (label, name_key) in self.param_name_labels.items():
             label.setText(t(name_key))
@@ -141,20 +170,25 @@ class RULAConfigDialog(QDialog):
     
     def save_config(self):
         """Save the current parameter values back to config"""
+        selected_lang = self.language_combo.currentData()
+
         for param_key, (combo, option_keys) in self.combos.items():
             # 獲取選中的索引
             index = combo.currentIndex()
-            
+
             # wrist_twist 和 legs 的索引 0-1 需要轉換為值 1-2
             if param_key in ['wrist_twist', 'legs']:
                 value = index + 1
             else:
                 # muscle_use 和 force_load 的索引直接對應值
                 value = index
-            
+
             config.RULA_CONFIG[param_key] = value
-        
-        # Optionally show confirmation or just close
+
+        # 套用語言（會透過 observer 通知主視窗與各元件）
+        if selected_lang in ('en', 'zh_TW'):
+            self.lang.set_language(selected_lang)
+
         self.accept()
 
 

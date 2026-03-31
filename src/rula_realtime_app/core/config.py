@@ -3,13 +3,21 @@
 """
 
 import os
+import numpy as np
 
 # === 數據源選擇 ===
-# 相機模式："WEBCAM" (普通攝像頭), "KINECT" (Kinect + Body Tracking), "KINECT_RGB" (Kinect RGB + MediaPipe)
-CAMERA_MODE = "KINECT"  # 可選: "WEBCAM", "KINECT", "KINECT_RGB"
+# 相機模式：
+# - "WEBCAM": 一般網路攝影機 + MediaPipe
+# - "KINECT": Azure Kinect + Body Tracking
+# - "KINECT_RGB": Kinect RGB + MediaPipe
+# - "RTMW3D": 一般網路攝影機 + RTMW3D
+CAMERA_MODE = "RTMW3D"  # 可選: "WEBCAM", "KINECT", "KINECT_RGB", "RTMW3D"
+
+# 一般網路攝影機索引
+WEBCAM_INDEX = 0
 
 # === 顯示模式選擇 ===
-DISPLAY_MODE = "COORDINATES"  # "RULA": 顯示RULA評估分數; "COORDINATES": 顯示關鍵點坐標
+DISPLAY_MODE = "RULA"  # "RULA": 顯示RULA評估分數; "COORDINATES": 顯示關鍵點坐標
 
 # === Azure Kinect SDK 配置 ===
 # 根據你的安裝路徑修改以下配置
@@ -57,6 +65,90 @@ MEDIAPIPE_CONFIG = {
     'min_detection_confidence': 0.5,
     'min_tracking_confidence': 0.5
 }
+
+# RTMW3D 設定（使用一般網路攝影機）
+RTMW3D_CONFIG = {
+    'backend': 'onnxruntime',
+    'device': 'cuda',         # 若 CUDA 不可用，程式會自動降級為 CPU
+    'det_frequency': 1,     # 每 10 幀才跑一次人體偵測，其餘幀用 tracking（大幅提升 FPS）
+    'tracking': False,         # 開啟 tracking 搭配高 det_frequency 才有意義
+    'iou_threshold': 0.05,    # 單目標鎖定 IoU 閾值
+    'kpt_threshold': 0.3      # 繪製骨架閾值
+}
+
+# RTMW（COCO-WholeBody 133）關鍵點索引（只列出 RULA 需要的點）
+RTMW = {
+    "NOSE": 0,
+    "LEFT_EAR": 3,
+    "RIGHT_EAR": 4,
+    "LEFT_SHOULDER": 5,
+    "RIGHT_SHOULDER": 6,
+    "LEFT_ELBOW": 7,
+    "RIGHT_ELBOW": 8,
+    "LEFT_WRIST": 9,
+    "RIGHT_WRIST": 10,
+    "LEFT_HIP": 11,
+    "RIGHT_HIP": 12,
+}
+
+# 將 RTMW 索引映射到 MediaPipe Pose 33 索引
+# RULA 核心使用的是 MediaPipe 33 點語意，故 RTMW3D 先轉成相同格式。
+RTMW_TO_MEDIAPIPE = {
+    0: RTMW["NOSE"],
+    7: RTMW["LEFT_EAR"],
+    8: RTMW["RIGHT_EAR"],
+    11: RTMW["LEFT_SHOULDER"],
+    12: RTMW["RIGHT_SHOULDER"],
+    13: RTMW["LEFT_ELBOW"],
+    14: RTMW["RIGHT_ELBOW"],
+    15: RTMW["LEFT_WRIST"],
+    16: RTMW["RIGHT_WRIST"],
+    17: RTMW["LEFT_WRIST"],   # pinky 代理點
+    18: RTMW["RIGHT_WRIST"],  # pinky 代理點
+    19: RTMW["LEFT_WRIST"],   # index 代理點
+    20: RTMW["RIGHT_WRIST"],  # index 代理點
+    23: RTMW["LEFT_HIP"],
+    24: RTMW["RIGHT_HIP"],
+}
+
+
+def convert_indexed_keypoints_to_pose33(keypoints_xyz, keypoint_scores, index_map):
+    """
+    通用索引轉換機制：將任意來源關鍵點陣列轉為 MediaPipe-like 33 點格式。
+
+    Args:
+        keypoints_xyz: 來源關鍵點，shape 約為 [K, 3+]，至少包含 x, y, z。
+        keypoint_scores: 來源分數，shape 約為 [K]。
+        index_map: 目標索引 -> 來源索引 的映射字典。
+
+    Returns:
+        list: 33 個關鍵點，每個為 [x, y, z, conf]
+    """
+    pose = [[0.0, 0.0, 0.0, 0.0] for _ in range(33)]
+
+    if keypoints_xyz is None:
+        return pose
+
+    kpts = np.asarray(keypoints_xyz)
+    if kpts.ndim != 2 or kpts.shape[1] < 3:
+        return pose
+
+    if keypoint_scores is None:
+        scores = np.ones((kpts.shape[0],), dtype=np.float32)
+    else:
+        scores = np.asarray(keypoint_scores).reshape(-1)
+
+    for dst_idx, src_idx in index_map.items():
+        if src_idx >= kpts.shape[0]:
+            continue
+
+        x, y, z = kpts[src_idx][:3]
+        conf = float(scores[src_idx]) if src_idx < scores.shape[0] else 0.0
+        conf = max(0.0, min(1.0, conf))
+
+        pose[dst_idx] = [float(x), float(y), float(z), conf]
+
+    return pose
 
 # === Azure Kinect 關節映射 (新增) ===
 # Azure Kinect joint indices (K4ABT)

@@ -629,6 +629,10 @@ TRANSLATIONS = {
         'en': 'Webcam',
         'zh_TW': '網路攝影機'
     },
+    'source_rtmw3d_webcam': {
+        'en': 'RTMW3D (Webcam)',
+        'zh_TW': 'RTMW3D（網路攝影機）'
+    },
     'source_video': {
         'en': 'Video File',
         'zh_TW': '影片檔案'

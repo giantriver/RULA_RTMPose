@@ -4,7 +4,7 @@
 
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QLabel, QMessageBox)
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QThread
 import numpy as np
 import cv2
 import os
@@ -12,12 +12,13 @@ from datetime import datetime
 
 from ..core.camera_handler import CameraHandler
 from ..core.pose_detector import PoseDetector
+from ..core.frame_processor import FrameProcessorWorker
 from ..core import angle_calc, get_best_rula_score
 from ..core import config as core_config
 
 from .styles import *
 from .components import ScorePanel, CoordinatesPanel, FrameRenderer, SnapshotManager, ChartGenerator
-from .dialogs import RULAConfigDialog, LanguageSelectionDialog
+from .dialogs import RULAConfigDialog
 from .language import language_manager, t
 
 
@@ -56,7 +57,8 @@ class MainWindow(QMainWindow):
         self.source_type_key = {
             "WEBCAM": "source_webcam",
             "KINECT": "source_kinect",
-            "KINECT_RGB": "source_kinect"
+            "KINECT_RGB": "source_kinect",
+            "RTMW3D": "source_rtmw3d_webcam"
         }.get(self.camera_mode, "source_webcam")
         
         self.update_window_title()
@@ -66,8 +68,17 @@ class MainWindow(QMainWindow):
         self.camera_handler = None
         self.kinect_handler = None
         self.kinect_rgb_handler = None
-        # 只有非 Kinect Body Tracking 模式才需要 MediaPipe
-        self.pose_detector = None if self.camera_mode == "KINECT" else PoseDetector()
+        self._frame_proc_worker = None
+        self._frame_proc_thread = None
+        # KINECT: 不需要 PoseDetector（由 Kinect SDK 負責骨架）
+        # RTMW3D: 延遲到 worker 執行緒才初始化（ONNX 模型載入很慢，不能阻塞主執行緒）
+        # MEDIAPIPE/WEBCAM: 直接初始化（速度快，~100ms）
+        if self.camera_mode == "KINECT":
+            self.pose_detector = None
+        elif self.camera_mode == "RTMW3D":
+            self.pose_detector = None  # 由 FrameProcessorWorker 在背景執行緒建立
+        else:
+            self.pose_detector = PoseDetector(backend_mode='MEDIAPIPE')
         
         # RULA 計算用的前一幀資料
         self.prev_left = None
@@ -139,60 +150,53 @@ class MainWindow(QMainWindow):
         self.video_label.setText(t('status_waiting'))
         left_layout.addWidget(self.video_label)
         
-        # 控制按鈕
+        # 控制按鈕（優化佈局以適應不同解析度）
         button_layout = QHBoxLayout()
-        
+        button_layout.setSpacing(8)
+
         self.start_button = QPushButton(t('btn_start'))
         self.start_button.clicked.connect(self.start_detection)
         self.start_button.setStyleSheet(START_BUTTON_STYLE)
-        button_layout.addWidget(self.start_button)
-        
+        button_layout.addWidget(self.start_button, stretch=1)
+
         self.stop_button = QPushButton(t('btn_stop'))
         self.stop_button.clicked.connect(self.stop_detection)
         self.stop_button.setEnabled(False)
         self.stop_button.setStyleSheet(STOP_BUTTON_STYLE)
-        button_layout.addWidget(self.stop_button)
-        
+        button_layout.addWidget(self.stop_button, stretch=1)
+
         self.pause_button = QPushButton(t('btn_pause'))
         self.pause_button.clicked.connect(self.toggle_pause)
         self.pause_button.setEnabled(False)
         self.pause_button.setStyleSheet(PAUSE_BUTTON_STYLE)
-        button_layout.addWidget(self.pause_button)
-        
+        button_layout.addWidget(self.pause_button, stretch=1)
+
         self.save_button = QPushButton(t('btn_snapshot'))
         self.save_button.clicked.connect(self.save_snapshot)
         self.save_button.setEnabled(False)
         self.save_button.setToolTip(t('tooltip_snapshot'))
         self.save_button.setStyleSheet(SAVE_BUTTON_STYLE)
-        button_layout.addWidget(self.save_button)
-        
+        button_layout.addWidget(self.save_button, stretch=1)
+
         self.record_button = QPushButton(t('btn_record'))
         self.record_button.clicked.connect(self.toggle_recording)
         self.record_button.setEnabled(False)
         self.record_button.setToolTip(t('tooltip_record'))
         self.record_button.setStyleSheet(RECORD_BUTTON_READY_STYLE)
-        button_layout.addWidget(self.record_button)
-        
+        button_layout.addWidget(self.record_button, stretch=1)
+
         self.rula_freq_label = QLabel(t('rula_freq_label').format('0.0'))
         self.rula_freq_label.setStyleSheet(FPS_LABEL_STYLE)
         self.rula_freq_label.setToolTip(t('tooltip_rula_freq'))
-        button_layout.addWidget(self.rula_freq_label)
-        
-        # 語言切換按鈕
-        self.lang_button = QPushButton(t('btn_language'))
-        self.lang_button.clicked.connect(self.toggle_language)
-        self.lang_button.setToolTip(t('tooltip_language'))
-        self.lang_button.setStyleSheet(CONFIG_BUTTON_STYLE)
-        button_layout.addWidget(self.lang_button)
-        
+        button_layout.addWidget(self.rula_freq_label, stretch=1)
+
         # 參數設定按鈕（齒輪圖案）
         self.config_button = QPushButton("⚙")
         self.config_button.clicked.connect(self.show_config_dialog)
         self.config_button.setToolTip(t('tooltip_config'))
         self.config_button.setStyleSheet(CONFIG_BUTTON_STYLE)
-        button_layout.addWidget(self.config_button)
-        
-        button_layout.addStretch()
+        button_layout.addWidget(self.config_button, stretch=0)
+
         left_layout.addLayout(button_layout)
         
         main_layout.addLayout(left_layout, stretch=3)  # 左側佔3份
@@ -229,13 +233,6 @@ class MainWindow(QMainWindow):
         title = t('window_title_with_source').format(source_type)
         self.setWindowTitle(title)
     
-    def toggle_language(self):
-        """打开语言选择对话框"""
-        dialog = LanguageSelectionDialog(self)
-        if dialog.exec():
-            new_lang = dialog.get_selected_language()
-            self.lang.set_language(new_lang)
-    
     def on_language_changed(self, lang_code):
         """语言改变时更新所有UI文本"""
         # 更新窗口标题
@@ -261,8 +258,6 @@ class MainWindow(QMainWindow):
             self.record_button.setText(t('btn_record'))
         self.record_button.setToolTip(t('tooltip_record'))
         
-        self.lang_button.setText(t('btn_language'))
-        self.lang_button.setToolTip(t('tooltip_language'))
         self.config_button.setToolTip(t('tooltip_config'))
         
         # 更新 RULA 频率标签
@@ -306,18 +301,32 @@ class MainWindow(QMainWindow):
             self.kinect_rgb_handler.frame_ready.connect(self.on_frame_ready)
             self.kinect_rgb_handler.error_occurred.connect(self.on_error)
             self.kinect_rgb_handler.start()
+        elif self.camera_mode == "RTMW3D":
+            # 使用一般攝像頭 + RTMW3D
+            self.camera_handler = CameraHandler(camera_index=core_config.WEBCAM_INDEX)
+            self.camera_handler.error_occurred.connect(self.on_error)
+            self._start_frame_processor()
+            # DirectConnection：camera 執行緒直接寫入 worker 的最新幀緩衝，不經過 event queue
+            self.camera_handler.frame_ready.connect(
+                self._frame_proc_worker.set_latest_frame,
+                Qt.ConnectionType.DirectConnection,
+            )
+            self.camera_handler.start()
         else:  # self.camera_mode == "WEBCAM"
             # 使用攝像頭 + MediaPipe
-            self.camera_handler = CameraHandler(camera_index=0)
-            self.camera_handler.frame_ready.connect(self.on_frame_ready)
+            self.camera_handler = CameraHandler(camera_index=core_config.WEBCAM_INDEX)
             self.camera_handler.error_occurred.connect(self.on_error)
+            self._start_frame_processor()
+            # DirectConnection：camera 執行緒直接寫入 worker 的最新幀緩衝，不經過 event queue
+            self.camera_handler.frame_ready.connect(
+                self._frame_proc_worker.set_latest_frame,
+                Qt.ConnectionType.DirectConnection,
+            )
             self.camera_handler.start()
-        
-        # 重置暫停狀態和 FPS 計數器
+
+        # 重置暫停狀態
         self.is_paused = False
         self.pause_button.setText(t('btn_pause'))
-        self.fps_counter = 0
-        self.fps_timer = cv2.getTickCount()
         
         # 更新按鈕狀態
         self.start_button.setEnabled(False)
@@ -326,6 +335,29 @@ class MainWindow(QMainWindow):
         self.save_button.setEnabled(True)
         self.record_button.setEnabled(True)
     
+    def _start_frame_processor(self):
+        """建立 FrameProcessorWorker 並移到獨立執行緒。"""
+        # RTMW3D 傳 backend_mode 字串，讓 worker 在自己的執行緒延遲初始化
+        # 其他模式傳已建立好的 PoseDetector
+        detector_arg = (
+            'RTMW3D' if self.camera_mode == 'RTMW3D' else self.pose_detector
+        )
+
+        self._frame_proc_thread = QThread()
+        self._frame_proc_worker = FrameProcessorWorker(
+            detector_arg,
+            self.display_mode,
+            self.rula_calc_every_n_frames,
+        )
+        self._frame_proc_worker.moveToThread(self._frame_proc_thread)
+
+        # start_timer 在 worker 執行緒啟動後才呼叫（確保 QTimer 在正確的執行緒）
+        self._frame_proc_thread.started.connect(self._frame_proc_worker.start_timer)
+
+        self._frame_proc_worker.frame_processed.connect(self.on_frame_processed)
+        self._frame_proc_worker.fps_updated.connect(self.on_fps_updated)
+        self._frame_proc_thread.start()
+
     def stop_detection(self):
         """停止辨識"""
         # 停止攝像頭
@@ -358,9 +390,15 @@ class MainWindow(QMainWindow):
             self.kinect_rgb_handler.stop()
             self.kinect_rgb_handler = None
         
+        # 停止 frame processor worker
+        if self._frame_proc_thread is not None:
+            self._frame_proc_thread.quit()
+            self._frame_proc_thread.wait()
+            self._frame_proc_thread = None
+            self._frame_proc_worker = None
+
         # 重置計數器和暫停狀態
         self.frame_counter = 0
-        self.fps_counter = 0
         self.prev_left = None
         self.prev_right = None
         self.is_paused = False
@@ -397,84 +435,41 @@ class MainWindow(QMainWindow):
         self.save_button.setEnabled(False)
         self.record_button.setEnabled(False)
     
-    def on_frame_ready(self, frame):
+    def on_frame_processed(self, annotated, rula_left, rula_right, landmarks):
         """
-        處理新影像幀
-        
-        Args:
-            frame: RGB 格式的影像 (numpy array)
+        接收 FrameProcessorWorker 處理完的結果（只做 UI 更新，不做任何 ML 推論）。
+        此方法在主執行緒執行。
         """
-        # 如果暫停，則不更新顯示
         if self.is_paused:
             return
-        
-        self.frame_counter += 1
-        
-        # 每幀都進行骨架辨識（保持骨架顯示流暢）
-        detected = self.pose_detector.process_frame(frame)
-        
-        # 計算 FPS（包含骨架偵測時間）
-        self.fps_counter += 1
-        if self.fps_counter >= 30:
-            current_time = cv2.getTickCount()
-            elapsed = (current_time - self.fps_timer) / cv2.getTickFrequency()
-            fps = self.fps_counter / elapsed
-            self.on_fps_updated(fps)
-            
-            self.fps_counter = 0
-            self.fps_timer = current_time
-        
-        if detected:
-            # 繪製骨架（每幀都繪製，不閃爍）
-            annotated = self.pose_detector.draw_landmarks(frame)
-            
-            # 根據顯示模式更新面板
-            if self.display_mode == "RULA":
-                # 只在特定幀才計算 RULA（降低計算負擔）
-                if self.frame_counter % self.rula_calc_every_n_frames == 0:
-                    # 取得關鍵點並計算 RULA
-                    landmarks = self.pose_detector.get_landmarks_array()
-                    rula_left, rula_right = angle_calc(landmarks, self.prev_left, self.prev_right)
-                    
-                    # 儲存為下一幀的參考
-                    self.prev_left = rula_left
-                    self.prev_right = rula_right
-                    
-                    # 更新顯示
-                    self.left_group.update_score_panel(rula_left)
-                    self.right_group.update_score_panel(rula_right)
-                    
-                    # 如果正在錄影，記錄分數
-                    if self.is_recording:
-                        self.record_rula_scores(rula_left, rula_right)
-            else:
-                # 坐標顯示模式 - 每幀更新
-                landmarks = self.pose_detector.get_landmarks_array()
-                if landmarks:
-                    self.coordinates_group.update_coordinates(landmarks)
-        else:
-            annotated = frame
-        
-        # 保存繪製骨架後的影像（用於保存功能）
+
         self.current_frame = annotated
-        
-        # 如果正在錄影，寫入影像幀
+
+        # 更新評估面板
+        if self.display_mode == "RULA":
+            if rula_left is not None and rula_right is not None:
+                self.left_group.update_score_panel(rula_left)
+                self.right_group.update_score_panel(rula_right)
+                if self.is_recording:
+                    self.record_rula_scores(rula_left, rula_right)
+        else:
+            if landmarks:
+                self.coordinates_group.update_coordinates(landmarks)
+
+        # 錄影：寫入幀
         if self.is_recording and self.video_writer is not None:
-            # 轉換為 BGR 格式（OpenCV VideoWriter 需要）
             frame_bgr = cv2.cvtColor(annotated, cv2.COLOR_RGB2BGR)
             self.video_writer.write(frame_bgr)
             self.recording_frame_count += 1
-        
-        # 如果正在倒數，在畫面上繪製倒數數字
+
+        # 疊加倒數 / 錄影指示
+        display_frame = annotated
         if self.countdown_active and self.countdown_value > 0:
-            annotated = self.draw_countdown_on_frame(annotated)
-        
-        # 如果正在錄影，在畫面上繪製錄影指示
+            display_frame = self.draw_countdown_on_frame(display_frame)
         if self.is_recording:
-            annotated = self.draw_recording_indicator(annotated)
-        
-        # 顯示影像
-        FrameRenderer.display_frame(self.video_label, annotated)
+            display_frame = self.draw_recording_indicator(display_frame)
+
+        FrameRenderer.display_frame(self.video_label, display_frame)
     
     def on_kinect_frame_ready(self, frame, pose):
         """

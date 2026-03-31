@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python -c \"import rtmlib; import os, inspect; p = os.path.dirname\\(inspect.getfile\\(rtmlib\\)\\); import glob; files = glob.glob\\(p+''/**/*.py'', recursive=True\\); [print\\(f\\) for f in files if ''wholebody'' in f.lower\\(\\) or ''body'' in f.lower\\(\\) or ''3d'' in f.lower\\(\\)]\")",
+      "Bash(.venv/Scripts/python -c \":*)"
+    ]
+  }
+}
