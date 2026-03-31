@@ -4,8 +4,7 @@
 
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QLabel, QMessageBox)
-from PyQt6.QtCore import Qt, QTimer, QThread
-import numpy as np
+from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
 import cv2
 import os
 from datetime import datetime
@@ -13,7 +12,7 @@ from datetime import datetime
 from ..core.camera_handler import CameraHandler
 from ..core.pose_detector import PoseDetector
 from ..core.frame_processor import FrameProcessorWorker
-from ..core import angle_calc, get_best_rula_score
+from ..core import angle_calc
 from ..core import config as core_config
 
 from .styles import *
@@ -42,6 +41,8 @@ class MainWindow(QMainWindow):
     """
     RULA 即時評估主視窗
     """
+
+    back_requested = pyqtSignal()
     
     def __init__(self):
         super().__init__()
@@ -100,16 +101,12 @@ class MainWindow(QMainWindow):
         self.frame_counter = 0
         self.rula_calc_every_n_frames = 5  # 每5幀才計算一次 RULA（降低計算負擔）
         
-        # 最後的骨架繪製結果（用於未處理的幀）
-        self.last_annotated_frame = None
-        
         # 倒數保存功能
         self.countdown_active = False
         self.countdown_value = 0
         self.countdown_purpose = None  # "snapshot" 或 "recording"
         self.countdown_timer = QTimer()
         self.countdown_timer.timeout.connect(self.update_countdown)
-        self.frame_to_save = None
         
         # 顯示模式 - 從 config 模組動態讀取
         self.display_mode = core_config.DISPLAY_MODE  # "RULA" 或 "COORDINATES"
@@ -197,6 +194,11 @@ class MainWindow(QMainWindow):
         self.config_button.setStyleSheet(CONFIG_BUTTON_STYLE)
         button_layout.addWidget(self.config_button, stretch=0)
 
+        self.back_button = QPushButton(t('history_back_btn'))
+        self.back_button.clicked.connect(self.on_back_home_clicked)
+        self.back_button.setStyleSheet(BACK_BTN_STYLE)
+        button_layout.addWidget(self.back_button, stretch=0)
+
         left_layout.addLayout(button_layout)
         
         main_layout.addLayout(left_layout, stretch=3)  # 左側佔3份
@@ -232,6 +234,27 @@ class MainWindow(QMainWindow):
         source_type = t(self.source_type_key)
         title = t('window_title_with_source').format(source_type)
         self.setWindowTitle(title)
+
+    def _show_message_box(self, icon, title, text, informative_text=None, style=None):
+        """統一建立與顯示訊息框，避免重複樣板碼。"""
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(icon)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(text)
+        if informative_text:
+            msg_box.setInformativeText(informative_text)
+        msg_box.setStyleSheet(style or MESSAGEBOX_STANDARD_STYLE)
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg_box.exec()
+
+    def _show_warning_message(self, text):
+        """顯示警告訊息。"""
+        self._show_message_box(
+            QMessageBox.Icon.Warning,
+            t('msg_warning'),
+            text,
+            style=MESSAGEBOX_WIDE_STYLE,
+        )
     
     def on_language_changed(self, lang_code):
         """语言改变时更新所有UI文本"""
@@ -259,6 +282,7 @@ class MainWindow(QMainWindow):
         self.record_button.setToolTip(t('tooltip_record'))
         
         self.config_button.setToolTip(t('tooltip_config'))
+        self.back_button.setText(t('history_back_btn'))
         
         # 更新 RULA 频率标签
         if hasattr(self, 'current_rula_freq'):
@@ -276,8 +300,8 @@ class MainWindow(QMainWindow):
         if self.display_mode == "RULA" and hasattr(self, 'left_group'):
             self.left_group.setTitle(t('panel_left_rula'))
             self.right_group.setTitle(t('panel_right_rula'))
-        elif self.display_mode == "COORDINATES" and hasattr(self, 'coords_panel'):
-            self.coords_panel.setTitle(t('panel_coordinates'))
+        elif self.display_mode == "COORDINATES" and hasattr(self, 'coordinates_group'):
+            self.coordinates_group.setTitle(t('panel_coordinates'))
         
     def start_detection(self):
         """開始辨識"""
@@ -434,6 +458,12 @@ class MainWindow(QMainWindow):
         self.pause_button.setEnabled(False)
         self.save_button.setEnabled(False)
         self.record_button.setEnabled(False)
+
+    def on_back_home_clicked(self):
+        """返回主頁。"""
+        if self.camera_handler or self.kinect_handler or self.kinect_rgb_handler:
+            self.stop_detection()
+        self.back_requested.emit()
     
     def on_frame_processed(self, annotated, rula_left, rula_right, landmarks):
         """
@@ -541,49 +571,25 @@ class MainWindow(QMainWindow):
         # 顯示影像
         FrameRenderer.display_frame(self.video_label, annotated)
     
-    def update_score_panel(self, panel, rula_data):
-        """
-        更新分數面板
-        
-        Args:
-            panel: ScorePanel
-            rula_data: RULA 計算結果字典
-        """
-        panel.update_score_panel(rula_data)
-    
-    def display_frame(self, frame):
-        """
-        顯示影像幀
-        
-        Args:
-            frame: RGB 格式的影像
-        """
-        FrameRenderer.display_frame(self.video_label, frame)
-    
     def on_error(self, error_msg):
         """處理錯誤"""
         # 在視窗上顯示錯誤
         self.video_label.setText(t('status_error').format(error_msg))
-        
-        # 彈出錯誤對話框
-        msg_box = QMessageBox(self)
-        msg_box.setIcon(QMessageBox.Icon.Critical)
-        msg_box.setWindowTitle(t('msg_error'))
-        
+
         # 設置主要文本
         if "Kinect" in error_msg or "連接" in error_msg or "connection" in error_msg.lower():
-            msg_box.setText(t('msg_kinect_connection_failed'))
+            message_text = t('msg_kinect_connection_failed')
         else:
-            msg_box.setText(t('msg_generic_error'))
-        
+            message_text = t('msg_generic_error')
+
         # 設置詳細信息（不使用 DetailedText 避免出現細節按鈕）
-        msg_box.setInformativeText(error_msg)
-        
-        # 設置樣式以確保文字可見
-        msg_box.setStyleSheet(ERROR_MESSAGEBOX_STYLE)
-        
-        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
-        msg_box.exec()
+        self._show_message_box(
+            QMessageBox.Icon.Critical,
+            t('msg_error'),
+            message_text,
+            informative_text=error_msg,
+            style=ERROR_MESSAGEBOX_STYLE,
+        )
         
         # 停止檢測
         self.stop_detection()
@@ -607,12 +613,7 @@ class MainWindow(QMainWindow):
     def save_snapshot(self):
         """開始倒數3秒後保存當前畫面和分數"""
         if self.current_frame is None:
-            msg_box = QMessageBox(self)
-            msg_box.setIcon(QMessageBox.Icon.Warning)
-            msg_box.setWindowTitle(t('msg_warning'))
-            msg_box.setText(t('msg_no_frame_snapshot'))
-            msg_box.setStyleSheet(MESSAGEBOX_WIDE_STYLE)
-            msg_box.exec()
+            self._show_warning_message(t('msg_no_frame_snapshot'))
             return
         
         # 如果已經在倒數中，忽略
@@ -662,31 +663,31 @@ class MainWindow(QMainWindow):
             
             if success:
                 # 顯示成功訊息
-                msg_box = QMessageBox(self)
-                msg_box.setIcon(QMessageBox.Icon.Information)
-                msg_box.setWindowTitle(t('msg_snapshot_success'))
-                msg_box.setText(t('msg_snapshot_saved'))
-                msg_box.setInformativeText(message)
-                msg_box.setStyleSheet(SUCCESS_MESSAGEBOX_STYLE)
-                msg_box.exec()
+                self._show_message_box(
+                    QMessageBox.Icon.Information,
+                    t('msg_snapshot_success'),
+                    t('msg_snapshot_saved'),
+                    informative_text=message,
+                    style=SUCCESS_MESSAGEBOX_STYLE,
+                )
             else:
                 # 顯示錯誤訊息
-                msg_box = QMessageBox(self)
-                msg_box.setIcon(QMessageBox.Icon.Critical)
-                msg_box.setWindowTitle(t('msg_error'))
-                msg_box.setText(t('msg_snapshot_failed'))
-                msg_box.setInformativeText(message)
-                msg_box.setStyleSheet(MESSAGEBOX_WIDE_STYLE)
-                msg_box.exec()
+                self._show_message_box(
+                    QMessageBox.Icon.Critical,
+                    t('msg_error'),
+                    t('msg_snapshot_failed'),
+                    informative_text=message,
+                    style=MESSAGEBOX_WIDE_STYLE,
+                )
             
         except Exception as e:
-            msg_box = QMessageBox(self)
-            msg_box.setIcon(QMessageBox.Icon.Critical)
-            msg_box.setWindowTitle(t('msg_error'))
-            msg_box.setText(t('msg_snapshot_failed'))
-            msg_box.setInformativeText(str(e))
-            msg_box.setStyleSheet(MESSAGEBOX_WIDE_STYLE)
-            msg_box.exec()
+            self._show_message_box(
+                QMessageBox.Icon.Critical,
+                t('msg_error'),
+                t('msg_snapshot_failed'),
+                informative_text=str(e),
+                style=MESSAGEBOX_WIDE_STYLE,
+            )
     
     def draw_countdown_on_frame(self, frame):
         """在影像上繪製倒數數字
@@ -725,8 +726,54 @@ class MainWindow(QMainWindow):
     
     def show_config_dialog(self):
         """顯示參數設定對話框"""
-        dialog = RULAConfigDialog(self)
-        dialog.exec()
+        dialog = RULAConfigDialog(self, current_backend_mode=self.get_pose_backend_mode())
+        if dialog.exec():
+            self.apply_pose_backend_mode(dialog.get_selected_backend_mode())
+
+    def get_pose_backend_mode(self):
+        """取得目前即時分析使用的姿勢偵測後端。"""
+        return 'RTMW3D' if self.camera_mode == 'RTMW3D' else 'MEDIAPIPE'
+
+    def apply_pose_backend_mode(self, backend_mode):
+        """套用姿勢偵測後端，必要時即時重啟偵測流程。"""
+        target_backend = (backend_mode or 'MEDIAPIPE').upper()
+        target_camera_mode = 'RTMW3D' if target_backend == 'RTMW3D' else 'WEBCAM'
+
+        if self.camera_mode == target_camera_mode:
+            return
+
+        is_detecting = any([
+            self.camera_handler is not None,
+            self.kinect_handler is not None,
+            self.kinect_rgb_handler is not None,
+        ])
+
+        if is_detecting:
+            self.stop_detection()
+
+        if self.pose_detector is not None:
+            try:
+                self.pose_detector.close()
+            except Exception:
+                pass
+            self.pose_detector = None
+
+        self.camera_mode = target_camera_mode
+        core_config.CAMERA_MODE = target_camera_mode
+
+        self.source_type_key = {
+            "WEBCAM": "source_webcam",
+            "KINECT": "source_kinect",
+            "KINECT_RGB": "source_kinect",
+            "RTMW3D": "source_rtmw3d_webcam"
+        }.get(self.camera_mode, "source_webcam")
+        self.update_window_title()
+
+        if self.camera_mode != 'RTMW3D':
+            self.pose_detector = PoseDetector(backend_mode='MEDIAPIPE')
+
+        if is_detecting:
+            self.start_detection()
     
     def toggle_recording(self):
         """切換錄影狀態"""
@@ -735,12 +782,7 @@ class MainWindow(QMainWindow):
         else:
             # 開始倒數後再開始錄影
             if self.current_frame is None:
-                msg_box = QMessageBox(self)
-                msg_box.setIcon(QMessageBox.Icon.Warning)
-                msg_box.setWindowTitle(t('msg_warning'))
-                msg_box.setText(t('msg_no_frame_record'))
-                msg_box.setStyleSheet(MESSAGEBOX_WIDE_STYLE)
-                msg_box.exec()
+                self._show_warning_message(t('msg_no_frame_record'))
                 return
             
             # 如果已經在倒數中，忽略
@@ -760,7 +802,6 @@ class MainWindow(QMainWindow):
         
         try:
             # 確保目錄存在
-            from .components import SnapshotManager
             SnapshotManager.ensure_directory_exists(SnapshotManager.RECORDING_DIR)
             
             # 生成文件名
@@ -795,7 +836,6 @@ class MainWindow(QMainWindow):
             self.recording_video_path = video_path  # 保存實際視頻路徑
             
             # 更新按鈕樣式和文字
-            from .styles import RECORD_BUTTON_STYLE
             self.record_button.setStyleSheet(RECORD_BUTTON_STYLE)
             self.record_button.setText(t('btn_stop_record'))
             
@@ -806,12 +846,12 @@ class MainWindow(QMainWindow):
             import traceback
             error_detail = traceback.format_exc()
             error_msg = f"無法開始錄影:\n\n{str(e)}\n\n詳細錯誤:\n{error_detail}"
-            msg_box = QMessageBox(self)
-            msg_box.setIcon(QMessageBox.Icon.Critical)
-            msg_box.setWindowTitle(t('msg_error'))
-            msg_box.setText(error_msg)
-            msg_box.setStyleSheet("QMessageBox {background-color: white;} QLabel {color: black; font-size: 11px; min-width: 400px;} QPushButton {color: black; background-color: #e0e0e0; border: 1px solid #999; padding: 5px 15px;}")
-            msg_box.exec()
+            self._show_message_box(
+                QMessageBox.Icon.Critical,
+                t('msg_error'),
+                error_msg,
+                style=MESSAGEBOX_EXTRA_WIDE_STYLE,
+            )
     
     def stop_recording(self):
         """停止錄影並保存分數記錄"""
@@ -826,7 +866,6 @@ class MainWindow(QMainWindow):
             
             # 保存 RULA 分數記錄（只在 RULA 模式下）
             if self.display_mode == "RULA" and self.rula_records:
-                from .components import SnapshotManager
                 txt_path = os.path.join(
                     SnapshotManager.RECORDING_DIR, 
                     f"recording_{self.recording_filename}.txt"
@@ -864,16 +903,16 @@ class MainWindow(QMainWindow):
             msg_box.setIcon(QMessageBox.Icon.Information)
             msg_box.setWindowTitle(t('msg_record_complete'))
             msg_box.setText(msg_text)
-            msg_box.setStyleSheet("QMessageBox {background-color: white;} QLabel {color: black; font-size: 12px;} QPushButton {color: black; background-color: #e0e0e0; border: 1px solid #999; padding: 5px 15px;}")
+            msg_box.setStyleSheet(MESSAGEBOX_STANDARD_STYLE)
             msg_box.exec()
             
         except Exception as e:
-            msg_box = QMessageBox(self)
-            msg_box.setIcon(QMessageBox.Icon.Critical)
-            msg_box.setWindowTitle(t('msg_error'))
-            msg_box.setText(t('msg_record_stop_error').format(str(e)))
-            msg_box.setStyleSheet("QMessageBox {background-color: white;} QLabel {color: black; font-size: 12px;} QPushButton {color: black; background-color: #e0e0e0; border: 1px solid #999; padding: 5px 15px;}")
-            msg_box.exec()
+            self._show_message_box(
+                QMessageBox.Icon.Critical,
+                t('msg_error'),
+                t('msg_record_stop_error').format(str(e)),
+                style=MESSAGEBOX_STANDARD_STYLE,
+            )
         finally:
             # 重置錄影狀態
             self.is_recording = False
@@ -884,7 +923,6 @@ class MainWindow(QMainWindow):
             self.recording_video_path = None
             
             # 恢復按鈕樣式和文字
-            from .styles import RECORD_BUTTON_READY_STYLE
             self.record_button.setStyleSheet(RECORD_BUTTON_READY_STYLE)
             self.record_button.setText(t('btn_record'))
             
@@ -1020,41 +1058,6 @@ class MainWindow(QMainWindow):
         # 繪製錄影時間
         cv2.putText(frame_copy, time_str, (w - 110, 38), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        
-        return frame_copy
-    
-    def draw_fps_info(self, frame):
-        """在影像左上角繪製 FPS 和 RULA 頻率信息"""
-        frame_copy = frame.copy()
-        h, w = frame_copy.shape[:2]
-        
-        # 準備顯示文字
-        fps_text = f"FPS: {self.current_fps:.1f}"
-        rula_text = f"RULA: {self.current_rula_freq:.1f} Hz"
-        
-        # 計算文字尺寸以確定背景大小
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.6
-        thickness = 2
-        (fps_w, fps_h), _ = cv2.getTextSize(fps_text, font, font_scale, thickness)
-        (rula_w, rula_h), _ = cv2.getTextSize(rula_text, font, font_scale, thickness)
-        
-        # 背景寬度取較大者，高度為兩行文字 + 間距
-        bg_width = max(fps_w, rula_w) + 20
-        bg_height = fps_h + rula_h + 30
-        
-        # 繪製半透明背景（左上角）
-        overlay = frame_copy.copy()
-        cv2.rectangle(overlay, (10, 10), (10 + bg_width, 10 + bg_height), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.6, frame_copy, 0.4, 0, frame_copy)
-        
-        # 繪製 FPS 文字（青色）
-        cv2.putText(frame_copy, fps_text, (20, 35), 
-                   font, font_scale, (255, 255, 0), thickness)
-        
-        # 繪製 RULA 頻率文字（青色）
-        cv2.putText(frame_copy, rula_text, (20, 35 + fps_h + 15), 
-                   font, font_scale, (255, 255, 0), thickness)
         
         return frame_copy
     

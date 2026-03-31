@@ -311,6 +311,22 @@ TRANSLATIONS = {
         'en': 'Adjust RULA fixed parameters:',
         'zh_TW': '調整 RULA 固定參數：'
     },
+    'config_pose_backend': {
+        'en': 'Pose Backend:',
+        'zh_TW': '姿勢辨識後端：'
+    },
+    'config_pose_backend_desc': {
+        'en': 'Switch real-time pose estimation backend (requires webcam mode).',
+        'zh_TW': '切換即時姿勢辨識後端（使用一般攝影機模式）。'
+    },
+    'config_option_backend_mediapipe': {
+        'en': 'MediaPipe',
+        'zh_TW': 'MediaPipe'
+    },
+    'config_option_backend_rtmw3d': {
+        'en': 'RTM Pose (RTMW3D)',
+        'zh_TW': 'RTM Pose（RTMW3D）'
+    },
     'config_wrist_twist': {
         'en': 'Wrist Twist:',
         'zh_TW': '手腕扭轉 (wrist_twist):'
@@ -636,7 +652,355 @@ TRANSLATIONS = {
     'source_video': {
         'en': 'Video File',
         'zh_TW': '影片檔案'
-    }
+    },
+
+    # ── Launcher window ──────────────────────────────────────────────────────
+    'launcher_window_title': {
+        'en': 'RULA Posture Assessment System',
+        'zh_TW': 'RULA 姿勢評估系統'
+    },
+    'launcher_title': {
+        'en': 'RULA Posture Assessment System',
+        'zh_TW': 'RULA 姿勢評估系統'
+    },
+    'launcher_subtitle': {
+        'en': 'Select an analysis mode to begin',
+        'zh_TW': '選擇分析模式以開始評估'
+    },
+    'launcher_realtime_title': {
+        'en': 'Real-time Analysis',
+        'zh_TW': '即時分析'
+    },
+    'launcher_realtime_desc': {
+        'en': 'Open camera for real-time\nRULA posture assessment and scoring',
+        'zh_TW': '開啟攝影機，即時進行\nRULA 姿勢評估與評分'
+    },
+    'launcher_realtime_btn': {
+        'en': 'Start Real-time Analysis',
+        'zh_TW': '開始即時分析'
+    },
+    'launcher_upload_title': {
+        'en': 'Upload Video Analysis',
+        'zh_TW': '上傳影片分析'
+    },
+    'launcher_upload_desc': {
+        'en': 'Select a video file for frame-by-frame\nRULA assessment and report export',
+        'zh_TW': '選擇影片檔案，逐幀進行\nRULA 姿勢評估與報告匯出'
+    },
+    'launcher_upload_btn': {
+        'en': 'Analyze Video',
+        'zh_TW': '選擇影片分析'
+    },
+    'launcher_history_btn': {
+        'en': '📋  View Records',
+        'zh_TW': '📋  查看分析紀錄'
+    },
+
+    # ── Upload window ────────────────────────────────────────────────────────
+    'upload_window_title': {
+        'en': 'Upload Video Analysis — RULA System',
+        'zh_TW': '上傳影片分析 — RULA 評估系統'
+    },
+    'upload_header_title': {
+        'en': 'Upload Video Analysis',
+        'zh_TW': '上傳影片分析'
+    },
+    'upload_header_sub': {
+        'en': 'Select a video and fill in survey info for frame-by-frame RULA analysis',
+        'zh_TW': '選擇影片檔案並填寫調查資訊，系統將進行逐幀 RULA 分析'
+    },
+    'upload_back_btn': {
+        'en': '← Back',
+        'zh_TW': '← 回到主頁'
+    },
+    'upload_file_group': {
+        'en': 'Video File',
+        'zh_TW': '影片檔案'
+    },
+    'upload_no_file': {
+        'en': 'No file selected',
+        'zh_TW': '尚未選擇檔案'
+    },
+    'upload_choose_btn': {
+        'en': 'Choose Video…',
+        'zh_TW': '選擇影片…'
+    },
+    'upload_choose_dialog_title': {
+        'en': 'Select Video File',
+        'zh_TW': '選擇影片檔案'
+    },
+    'upload_meta_group': {
+        'en': 'Survey Info',
+        'zh_TW': '調查資訊'
+    },
+    'upload_date_label': {
+        'en': 'Survey Date',
+        'zh_TW': '調查日期'
+    },
+    'upload_assessor_label': {
+        'en': 'Assessor',
+        'zh_TW': '評估員'
+    },
+    'upload_assessor_placeholder': {
+        'en': 'Assessor name',
+        'zh_TW': '評估員姓名'
+    },
+    'upload_org_label': {
+        'en': 'Organization',
+        'zh_TW': '單位'
+    },
+    'upload_org_placeholder': {
+        'en': 'Organization name',
+        'zh_TW': '單位名稱'
+    },
+    'upload_task_label': {
+        'en': 'Task Name',
+        'zh_TW': '作業名稱'
+    },
+    'upload_task_placeholder': {
+        'en': 'Task name',
+        'zh_TW': '作業名稱'
+    },
+    'upload_settings_group': {
+        'en': 'Analysis Settings',
+        'zh_TW': '分析設定'
+    },
+    'upload_interval_label': {
+        'en': 'Sample Interval (frames)',
+        'zh_TW': '取樣間隔（幀）'
+    },
+    'upload_interval_tooltip': {
+        'en': 'Sample every N frames (larger = faster, lower accuracy)',
+        'zh_TW': '每隔幾幀取樣一次（數字越大越快，精度越低）'
+    },
+    'upload_backend_label': {
+        'en': 'Detection Backend',
+        'zh_TW': '偵測後端'
+    },
+    'upload_backend_rtmw3d': {
+        'en': 'RTMW3D (High Accuracy)',
+        'zh_TW': 'RTMW3D（高精度）'
+    },
+    'upload_backend_mediapipe': {
+        'en': 'MediaPipe (Fast)',
+        'zh_TW': 'MediaPipe（快速）'
+    },
+    'upload_analyze_btn': {
+        'en': '▶  Start Analysis',
+        'zh_TW': '▶  開始分析'
+    },
+    'upload_status_ready': {
+        'en': 'Ready to analyze…',
+        'zh_TW': '準備分析…'
+    },
+    'upload_status_init': {
+        'en': 'Initializing…',
+        'zh_TW': '初始化中…'
+    },
+    'upload_cancel_btn': {
+        'en': 'Cancel',
+        'zh_TW': '取消'
+    },
+    'upload_no_file_title': {
+        'en': 'No File Selected',
+        'zh_TW': '未選擇檔案'
+    },
+    'upload_no_file_msg': {
+        'en': 'Please select a video file first.',
+        'zh_TW': '請先選擇要分析的影片檔案。'
+    },
+    'upload_error_title': {
+        'en': 'Analysis Error',
+        'zh_TW': '分析錯誤'
+    },
+    'upload_error_msg': {
+        'en': 'Error during analysis:\n{}',
+        'zh_TW': '分析過程發生錯誤：\n{}'
+    },
+
+    # ── History window ───────────────────────────────────────────────────────
+    'history_window_title': {
+        'en': 'Analysis Records — RULA System',
+        'zh_TW': '分析紀錄查詢 — RULA 評估系統'
+    },
+    'history_header_title': {
+        'en': 'Analysis Records',
+        'zh_TW': '分析紀錄查詢'
+    },
+    'history_header_sub': {
+        'en': 'View locally stored video analysis records',
+        'zh_TW': '查看本機儲存的影片分析記錄'
+    },
+    'history_back_btn': {
+        'en': '← Back',
+        'zh_TW': '← 回到主頁'
+    },
+    'history_refresh_btn': {
+        'en': '↻  Refresh',
+        'zh_TW': '↻  重新整理'
+    },
+    'history_empty': {
+        'en': 'No records yet\nPlease analyze a video first',
+        'zh_TW': '尚無分析記錄\n請先進行影片分析'
+    },
+    'history_col_date':     {'en': 'Survey Date',  'zh_TW': '調查日期'},
+    'history_col_assessor': {'en': 'Assessor',      'zh_TW': '評估員'},
+    'history_col_org':      {'en': 'Organization',  'zh_TW': '單位'},
+    'history_col_task':     {'en': 'Task Name',     'zh_TW': '作業名稱'},
+    'history_col_filename': {'en': 'Filename',      'zh_TW': '影片檔名'},
+    'history_col_created':  {'en': 'Upload Time',   'zh_TW': '上傳時間'},
+    'history_col_max':      {'en': 'Max Score',     'zh_TW': '最高分'},
+    'history_col_avg':      {'en': 'Avg Score',     'zh_TW': '平均分'},
+    'history_col_actions':  {'en': 'Actions',       'zh_TW': '操作'},
+    'history_view_btn': {
+        'en': 'View',
+        'zh_TW': '查看'
+    },
+    'history_export_btn_text': {
+        'en': 'Export',
+        'zh_TW': '匯出'
+    },
+    'history_delete_btn': {
+        'en': 'Delete',
+        'zh_TW': '刪除'
+    },
+    'history_export_dialog_title': {
+        'en': 'Save CSV Report',
+        'zh_TW': '儲存 CSV 報告'
+    },
+    'history_export_success_title': {
+        'en': 'Export Successful',
+        'zh_TW': '匯出成功'
+    },
+    'history_export_success_msg': {
+        'en': 'CSV saved to:\n{}',
+        'zh_TW': 'CSV 已儲存至：\n{}'
+    },
+    'history_export_fail_title': {
+        'en': 'Export Failed',
+        'zh_TW': '匯出失敗'
+    },
+    'history_delete_confirm_title': {
+        'en': 'Confirm Delete',
+        'zh_TW': '確認刪除'
+    },
+    'history_delete_confirm_msg': {
+        'en': 'Delete this record?\n{}',
+        'zh_TW': '確定要刪除此筆記錄嗎？\n{}'
+    },
+    'history_delete_fail_title': {
+        'en': 'Delete Failed',
+        'zh_TW': '刪除失敗'
+    },
+
+    # ── Result window ────────────────────────────────────────────────────────
+    'result_window_title_suffix': {
+        'en': '— RULA Analysis',
+        'zh_TW': '— RULA 分析結果'
+    },
+    'result_header_title_prefix': {
+        'en': 'RULA Analysis  —  ',
+        'zh_TW': 'RULA 分析結果  —  '
+    },
+    'result_header_sub_local': {
+        'en': 'Local Analysis',
+        'zh_TW': '本機分析'
+    },
+    'result_export_btn': {
+        'en': '⬇  Export CSV',
+        'zh_TW': '⬇  匯出 CSV'
+    },
+    'result_close_btn': {
+        'en': '✕  Close',
+        'zh_TW': '✕  關閉'
+    },
+    'result_no_video_text': {
+        'en': 'No video preview',
+        'zh_TW': '無影片預覽'
+    },
+    'result_skel_checkbox': {
+        'en': 'Show Skeleton',
+        'zh_TW': '顯示骨架'
+    },
+    'result_ctrl_title': {
+        'en': 'Playback Controls',
+        'zh_TW': '採樣播放控制'
+    },
+    'result_prev_btn': {
+        'en': '⏮  Prev',
+        'zh_TW': '⏮  上一幀'
+    },
+    'result_play_btn': {
+        'en': '▶  Play',
+        'zh_TW': '▶  播放'
+    },
+    'result_pause_btn': {
+        'en': '⏸  Pause',
+        'zh_TW': '⏸  暫停'
+    },
+    'result_next_btn': {
+        'en': 'Next  ⏭',
+        'zh_TW': '下一幀  ⏭'
+    },
+    'result_frame_counter': {
+        'en': 'Frame {} / {}',
+        'zh_TW': '幀 {} / {}'
+    },
+    'result_time_label': {
+        'en': 'Time: {:.2f} s',
+        'zh_TW': '時間：{:.2f} s'
+    },
+    'result_no_video_note': {
+        'en': '(Original video unavailable, charts only)',
+        'zh_TW': '（原始影片不可用，僅顯示圖表）'
+    },
+    'result_stat_title':    {'en': 'Summary',        'zh_TW': '分析總覽'},
+    'result_stat_total':    {'en': 'Total Frames',   'zh_TW': '總幀數'},
+    'result_stat_valid':    {'en': 'Valid Frames',   'zh_TW': '有效幀'},
+    'result_stat_invalid':  {'en': 'Invalid Frames', 'zh_TW': '無效幀'},
+    'result_stat_duration': {'en': 'Duration',       'zh_TW': '影片長度'},
+    'result_stat_max':      {'en': 'Max Score',      'zh_TW': '最高分'},
+    'result_stat_avg':      {'en': 'Avg Score',      'zh_TW': '平均分'},
+    'result_chart_title': {
+        'en': 'RULA Score Trend  (click to jump)',
+        'zh_TW': 'RULA 分數趨勢  （點擊跳幀）'
+    },
+    'result_chart_x': {
+        'en': 'Time (sec)',
+        'zh_TW': '時間（秒）'
+    },
+    'result_chart_y': {
+        'en': 'RULA Score',
+        'zh_TW': 'RULA 分數'
+    },
+    'result_bar_title': {
+        'en': 'Score Distribution',
+        'zh_TW': '分數分佈'
+    },
+    'result_bar_x': {
+        'en': 'RULA Score',
+        'zh_TW': 'RULA 分數'
+    },
+    'result_bar_y': {
+        'en': 'Frames',
+        'zh_TW': '幀數'
+    },
+    'result_export_dialog_title': {
+        'en': 'Save CSV Report',
+        'zh_TW': '儲存 CSV 報告'
+    },
+    'result_export_success_title': {
+        'en': 'Export Successful',
+        'zh_TW': '匯出成功'
+    },
+    'result_export_success_msg': {
+        'en': 'CSV saved to:\n{}',
+        'zh_TW': 'CSV 已儲存至：\n{}'
+    },
+    'result_export_fail_title': {
+        'en': 'Export Failed',
+        'zh_TW': '匯出失敗'
+    },
 }
 
 

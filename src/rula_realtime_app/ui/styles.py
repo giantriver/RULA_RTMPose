@@ -213,9 +213,11 @@ CONFIG_BUTTON_STYLE = _button_style(BTN_PURPLE, BTN_PURPLE_DARK, BTN_PURPLE_LIGH
                                      width=50, font_size=24)
 
 # Message box styles using macro
+MESSAGEBOX_STANDARD_STYLE = _messagebox_style(font_size=12)
 ERROR_MESSAGEBOX_STYLE = _messagebox_style(font_size=11)
 SUCCESS_MESSAGEBOX_STYLE = _messagebox_style(font_size=11)
 MESSAGEBOX_WIDE_STYLE = _messagebox_style(font_size=12, label_min_width="200px")
+MESSAGEBOX_EXTRA_WIDE_STYLE = _messagebox_style(font_size=11, label_min_width="400px")
 
 # Dialog style using macro
 RULA_CONFIG_DIALOG_STYLE = _dialog_style()
@@ -278,4 +280,158 @@ RECORD_BUTTON_READY_STYLE = _button_style(
     hover_dark="#7f8c8d",
     pressed="#5d6d7e",
     font_size=16
+)
+
+# ============================================================================
+# LAUNCHER / UPLOAD / HISTORY WINDOW STYLES
+# ============================================================================
+
+# Launcher window main background (dark slate → dark emerald)
+LAUNCHER_BG_STYLE = """
+    QMainWindow {
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 #0f172a, stop:1 #064e3b);
+    }
+    QWidget {
+        color: #ecf0f1;
+        font-family: "Microsoft JhengHei", "微軟正黑體", Arial;
+    }
+"""
+
+LAUNCHER_CENTRAL_STYLE = """
+    QWidget#launcher_bg {
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 #0f172a, stop:1 #064e3b);
+    }
+"""
+
+# Header card (white card on top)
+HEADER_CARD_STYLE = """
+    QFrame#header_card {
+        background-color: rgba(255, 255, 255, 0.97);
+        border-radius: 16px;
+    }
+    QLabel {
+        color: #0f172a;
+        background: transparent;
+    }
+"""
+
+# Mode card (white card for each launch option)
+MODE_CARD_STYLE = """
+    QFrame#mode_card {
+        background-color: rgba(255, 255, 255, 0.95);
+        border-radius: 16px;
+    }
+    QLabel {
+        background: transparent;
+    }
+"""
+
+# Emerald launch button (即時分析)
+LAUNCH_BTN_EMERALD = _button_style(
+    "#10b981", "#059669", "#34d399", "#10b981", "#047857", font_size=15
+)
+
+# Blue launch button (上傳影片)
+LAUNCH_BTN_BLUE = _button_style(
+    "#3b82f6", "#2563eb", "#60a5fa", "#3b82f6", "#1e40af", font_size=15
+)
+
+# Upload/history window main background
+UPLOAD_BG_STYLE = """
+    QMainWindow {
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+            stop:0 #0f172a, stop:1 #064e3b);
+    }
+    QWidget {
+        color: #ecf0f1;
+        font-family: "Microsoft JhengHei", "微軟正黑體", Arial;
+    }
+"""
+
+CONTENT_CARD_STYLE = """
+    QFrame#content_card {
+        background-color: rgba(255, 255, 255, 0.97);
+        border-radius: 16px;
+    }
+    QLabel {
+        color: #0f172a;
+        background: transparent;
+    }
+    QLineEdit, QDateEdit, QSpinBox, QComboBox {
+        background-color: #f8fafc;
+        color: #0f172a;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 13px;
+    }
+    QLineEdit:focus, QDateEdit:focus, QSpinBox:focus, QComboBox:focus {
+        border: 1px solid #10b981;
+    }
+    QGroupBox {
+        color: #0f172a;
+        font-size: 14px;
+        font-weight: bold;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        margin-top: 12px;
+        padding: 10px;
+        background: transparent;
+    }
+    QGroupBox::title {
+        subcontrol-origin: margin;
+        left: 10px;
+        padding: 2px 8px;
+        color: #059669;
+    }
+    QTableWidget {
+        background-color: white;
+        color: #0f172a;
+        border: none;
+        gridline-color: #f1f5f9;
+        font-size: 13px;
+    }
+    QTableWidget::item:selected {
+        background-color: #ecfdf5;
+        color: #0f172a;
+    }
+    QHeaderView::section {
+        background-color: #f8fafc;
+        color: #0f172a;
+        font-weight: bold;
+        font-size: 13px;
+        border: none;
+        border-bottom: 2px solid #e2e8f0;
+        padding: 8px;
+    }
+    QProgressBar {
+        background-color: #f1f5f9;
+        border-radius: 6px;
+        border: none;
+        height: 12px;
+        text-align: center;
+        color: #0f172a;
+        font-size: 11px;
+    }
+    QProgressBar::chunk {
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+            stop:0 #10b981, stop:1 #059669);
+        border-radius: 6px;
+    }
+"""
+
+# Back / action buttons inside upload/history
+BACK_BTN_STYLE = _button_style(
+    "#64748b", "#475569", "#94a3b8", "#64748b", "#334155", font_size=13
+)
+EMERALD_BTN_STYLE = _button_style(
+    "#10b981", "#059669", "#34d399", "#10b981", "#047857", font_size=13
+)
+BLUE_BTN_STYLE = _button_style(
+    "#3b82f6", "#2563eb", "#60a5fa", "#3b82f6", "#1e40af", font_size=13
+)
+RED_BTN_STYLE = _button_style(
+    BTN_RED, BTN_RED_DARK, BTN_RED_LIGHT, BTN_RED, BTN_RED_DARK, font_size=13
 )

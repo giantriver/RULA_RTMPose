@@ -1,0 +1,395 @@
+"""
+上傳影片分析視窗
+使用者填寫調查資訊、選擇影片後送出分析；
+分析完成後發出 analysis_done 信號，由 AppController 開啟獨立的 ResultWindow。
+"""
+
+import os
+
+from PyQt6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QPushButton, QLabel, QFrame, QLineEdit, QSpinBox, QComboBox,
+    QProgressBar, QFileDialog, QGroupBox, QSizePolicy,
+    QDateEdit, QMessageBox, QScrollArea
+)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QDate
+from PyQt6.QtGui import QPixmap, QImage, QFont
+
+from ..core.video_file_processor import VideoFileProcessor, save_analysis
+from .styles import (
+    UPLOAD_BG_STYLE, CONTENT_CARD_STYLE, HEADER_CARD_STYLE,
+    BACK_BTN_STYLE, EMERALD_BTN_STYLE, BLUE_BTN_STYLE, RED_BTN_STYLE,
+)
+from .language import language_manager, t
+
+
+class UploadWindow(QMainWindow):
+    """
+    上傳影片 → 送出分析
+
+    Signals:
+        back_requested:     使用者按「回到主頁」
+        analysis_done(dict): 分析完成，附帶完整 results dict（含 landmarks_2d）
+    """
+
+    back_requested  = pyqtSignal()
+    analysis_done   = pyqtSignal(dict)
+
+    def __init__(self):
+        super().__init__()
+        language_manager.add_observer(self.on_language_changed)
+        self.setMinimumSize(820, 620)
+        self.resize(940, 700)
+        self.setStyleSheet(UPLOAD_BG_STYLE)
+
+        self._processor   = None
+        self._proc_thread = None
+        self._video_path  = ''
+
+        self._init_ui()
+        self._retranslate_ui()
+
+    # ── UI ────────────────────────────────────────────────────────────────────
+    def _init_ui(self):
+        central = QWidget()
+        self.setCentralWidget(central)
+
+        outer = QVBoxLayout(central)
+        outer.setSpacing(20)
+        outer.setContentsMargins(40, 28, 40, 28)
+
+        outer.addWidget(self._build_header())
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet('QScrollArea { background: transparent; border: none; }')
+
+        content = QWidget()
+        content.setStyleSheet('background: transparent;')
+        self._content_layout = QVBoxLayout(content)
+        self._content_layout.setSpacing(16)
+        self._content_layout.setContentsMargins(0, 0, 0, 0)
+
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
+
+        self._build_form_panel()
+
+    # ── Header ────────────────────────────────────────────────────────────────
+    def _build_header(self) -> QFrame:
+        card = QFrame()
+        card.setObjectName('header_card')
+        card.setStyleSheet(HEADER_CARD_STYLE)
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+        row = QHBoxLayout(card)
+        row.setContentsMargins(24, 16, 24, 16)
+        row.setSpacing(14)
+
+        icon = QLabel('📂')
+        icon.setFixedSize(48, 48)
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon.setStyleSheet("""
+            QLabel {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #3b82f6, stop:1 #2563eb);
+                border-radius: 12px; font-size: 22px;
+            }
+        """)
+        row.addWidget(icon)
+
+        tc = QVBoxLayout()
+        self._header_title = QLabel()
+        self._header_title.setFont(QFont('Microsoft JhengHei', 16, QFont.Weight.Bold))
+        self._header_title.setStyleSheet('color: #0f172a;')
+        tc.addWidget(self._header_title)
+
+        self._header_sub = QLabel()
+        self._header_sub.setStyleSheet('color: #64748b; font-size: 13px;')
+        tc.addWidget(self._header_sub)
+
+        row.addLayout(tc)
+        row.addStretch()
+
+        self._back_btn = QPushButton()
+        self._back_btn.setStyleSheet(BACK_BTN_STYLE)
+        self._back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._back_btn.clicked.connect(self.back_requested.emit)
+        row.addWidget(self._back_btn)
+
+        return card
+
+    # ── Form ──────────────────────────────────────────────────────────────────
+    def _build_form_panel(self):
+        card = QFrame()
+        card.setObjectName('content_card')
+        card.setStyleSheet(CONTENT_CARD_STYLE)
+
+        col = QVBoxLayout(card)
+        col.setContentsMargins(28, 24, 28, 24)
+        col.setSpacing(18)
+
+        # File selection
+        self._file_group = QGroupBox()
+        fl = QHBoxLayout(self._file_group)
+        fl.setSpacing(10)
+
+        self._file_label = QLabel()
+        self._file_label.setStyleSheet('color: #64748b; font-size: 13px;')
+        self._file_label.setWordWrap(True)
+        fl.addWidget(self._file_label, stretch=1)
+
+        self._choose_btn = QPushButton()
+        self._choose_btn.setStyleSheet(BLUE_BTN_STYLE)
+        self._choose_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._choose_btn.setFixedWidth(120)
+        self._choose_btn.clicked.connect(self._choose_file)
+        fl.addWidget(self._choose_btn)
+
+        col.addWidget(self._file_group)
+
+        # Survey metadata
+        self._meta_group = QGroupBox()
+        grid = QGridLayout(self._meta_group)
+        grid.setSpacing(10)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(3, 1)
+
+        self._date_label = QLabel()
+        grid.addWidget(self._date_label, 0, 0)
+        self._date_edit = QDateEdit(QDate.currentDate())
+        self._date_edit.setCalendarPopup(True)
+        self._date_edit.setDisplayFormat('yyyy-MM-dd')
+        grid.addWidget(self._date_edit, 0, 1)
+
+        self._assessor_label = QLabel()
+        grid.addWidget(self._assessor_label, 0, 2)
+        self._assessor_edit = QLineEdit()
+        grid.addWidget(self._assessor_edit, 0, 3)
+
+        self._org_label = QLabel()
+        grid.addWidget(self._org_label, 1, 0)
+        self._org_edit = QLineEdit()
+        grid.addWidget(self._org_edit, 1, 1)
+
+        self._task_label = QLabel()
+        grid.addWidget(self._task_label, 1, 2)
+        self._task_edit = QLineEdit()
+        grid.addWidget(self._task_edit, 1, 3)
+
+        col.addWidget(self._meta_group)
+
+        # Analysis settings
+        self._settings_group = QGroupBox()
+        sl = QHBoxLayout(self._settings_group)
+        sl.setSpacing(16)
+
+        self._interval_label = QLabel()
+        sl.addWidget(self._interval_label)
+        self._interval_spin = QSpinBox()
+        self._interval_spin.setRange(1, 60)
+        self._interval_spin.setValue(10)
+        sl.addWidget(self._interval_spin)
+
+        self._backend_label = QLabel()
+        sl.addWidget(self._backend_label)
+        self._backend_combo = QComboBox()
+        self._backend_combo.addItem('', 'RTMW3D')
+        self._backend_combo.addItem('', 'MEDIAPIPE')
+        sl.addWidget(self._backend_combo)
+        sl.addStretch()
+
+        col.addWidget(self._settings_group)
+
+        # Analyze button
+        self._analyze_btn = QPushButton()
+        self._analyze_btn.setStyleSheet(EMERALD_BTN_STYLE)
+        self._analyze_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._analyze_btn.clicked.connect(self._start_analysis)
+        col.addWidget(self._analyze_btn)
+
+        self._content_layout.addWidget(card)
+
+        # Preview label
+        self._preview_lbl = QLabel()
+        self._preview_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._preview_lbl.setVisible(False)
+        self._preview_lbl.setStyleSheet(
+            'border: 2px solid #3b82f6; border-radius:10px; background:#1a1a1a;'
+        )
+        self._preview_lbl.setFixedHeight(200)
+        self._content_layout.addWidget(self._preview_lbl)
+
+        # Progress card
+        self._progress_card = self._build_progress_card()
+        self._progress_card.setVisible(False)
+        self._content_layout.addWidget(self._progress_card)
+
+        self._content_layout.addStretch()
+
+    def _build_progress_card(self) -> QFrame:
+        card = QFrame()
+        card.setObjectName('content_card')
+        card.setStyleSheet(CONTENT_CARD_STYLE)
+
+        col = QVBoxLayout(card)
+        col.setContentsMargins(24, 20, 24, 20)
+        col.setSpacing(12)
+
+        self._status_lbl = QLabel()
+        self._status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._status_lbl.setStyleSheet('color: #0f172a; font-size: 14px;')
+        col.addWidget(self._status_lbl)
+
+        self._progress_bar = QProgressBar()
+        self._progress_bar.setRange(0, 100)
+        self._progress_bar.setValue(0)
+        col.addWidget(self._progress_bar)
+
+        h = QHBoxLayout()
+        h.addStretch()
+        self._cancel_btn = QPushButton()
+        self._cancel_btn.setStyleSheet(RED_BTN_STYLE)
+        self._cancel_btn.setFixedWidth(100)
+        self._cancel_btn.clicked.connect(self._cancel_analysis)
+        h.addWidget(self._cancel_btn)
+        col.addLayout(h)
+
+        return card
+
+    # ── Language ──────────────────────────────────────────────────────────────
+    def on_language_changed(self, _lang_code):
+        self._retranslate_ui()
+
+    def _retranslate_ui(self):
+        self.setWindowTitle(t('upload_window_title'))
+        self._header_title.setText(t('upload_header_title'))
+        self._header_sub.setText(t('upload_header_sub'))
+        self._back_btn.setText(t('upload_back_btn'))
+
+        self._file_group.setTitle(t('upload_file_group'))
+        # Only reset file label text if no file chosen yet
+        if not self._video_path:
+            self._file_label.setText(t('upload_no_file'))
+        self._choose_btn.setText(t('upload_choose_btn'))
+
+        self._meta_group.setTitle(t('upload_meta_group'))
+        self._date_label.setText(t('upload_date_label'))
+        self._assessor_label.setText(t('upload_assessor_label'))
+        self._assessor_edit.setPlaceholderText(t('upload_assessor_placeholder'))
+        self._org_label.setText(t('upload_org_label'))
+        self._org_edit.setPlaceholderText(t('upload_org_placeholder'))
+        self._task_label.setText(t('upload_task_label'))
+        self._task_edit.setPlaceholderText(t('upload_task_placeholder'))
+
+        self._settings_group.setTitle(t('upload_settings_group'))
+        self._interval_label.setText(t('upload_interval_label'))
+        self._interval_spin.setToolTip(t('upload_interval_tooltip'))
+        self._backend_label.setText(t('upload_backend_label'))
+        self._backend_combo.setItemText(0, t('upload_backend_rtmw3d'))
+        self._backend_combo.setItemText(1, t('upload_backend_mediapipe'))
+
+        self._analyze_btn.setText(t('upload_analyze_btn'))
+        self._cancel_btn.setText(t('upload_cancel_btn'))
+        self._status_lbl.setText(t('upload_status_ready'))
+
+    # ── File chooser ──────────────────────────────────────────────────────────
+    def _choose_file(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, t('upload_choose_dialog_title'), '',
+            'Video Files (*.mp4 *.avi *.mov *.mkv *.wmv *.flv *.webm);;All Files (*)'
+        )
+        if path:
+            self._video_path = path
+            self._file_label.setText(os.path.basename(path))
+            self._file_label.setStyleSheet('color: #0f172a; font-size: 13px;')
+
+    # ── Start / cancel analysis ───────────────────────────────────────────────
+    def _start_analysis(self):
+        if not self._video_path:
+            QMessageBox.warning(self, t('upload_no_file_title'), t('upload_no_file_msg'))
+            return
+
+        meta = {
+            'survey_date':  self._date_edit.date().toString('yyyy-MM-dd'),
+            'assessor':     self._assessor_edit.text().strip(),
+            'organization': self._org_edit.text().strip(),
+            'task_name':    self._task_edit.text().strip(),
+        }
+
+        self._analyze_btn.setEnabled(False)
+        self._preview_lbl.setVisible(True)
+        self._progress_card.setVisible(True)
+        self._progress_bar.setValue(0)
+        self._status_lbl.setText(t('upload_status_init'))
+
+        self._proc_thread = QThread()
+        self._processor   = VideoFileProcessor(
+            video_path     = self._video_path,
+            meta           = meta,
+            frame_interval = self._interval_spin.value(),
+            backend_mode   = self._backend_combo.currentData(),
+        )
+        self._processor.moveToThread(self._proc_thread)
+
+        self._proc_thread.started.connect(self._processor.run)
+        self._processor.progress_updated.connect(self._on_progress)
+        self._processor.frame_preview.connect(self._on_preview)
+        self._processor.analysis_complete.connect(self._on_complete)
+        self._processor.error_occurred.connect(self._on_error)
+
+        self._proc_thread.start()
+
+    def _cancel_analysis(self):
+        if self._processor:
+            self._processor.cancel()
+        if self._proc_thread and self._proc_thread.isRunning():
+            self._proc_thread.quit()
+            self._proc_thread.wait(3000)
+        self._reset_form_state()
+
+    # ── Worker signals ────────────────────────────────────────────────────────
+    def _on_progress(self, pct: int, msg: str):
+        self._progress_bar.setValue(pct)
+        self._status_lbl.setText(msg)
+
+    def _on_preview(self, frame):
+        try:
+            h, w, ch = frame.shape
+            img = QImage(frame.data, w, h, ch * w, QImage.Format.Format_RGB888)
+            pix = QPixmap.fromImage(img).scaled(
+                self._preview_lbl.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._preview_lbl.setPixmap(pix)
+        except Exception:
+            pass
+
+    def _on_complete(self, results: dict):
+        if self._proc_thread:
+            self._proc_thread.quit()
+            self._proc_thread.wait()
+
+        save_analysis(results)
+        self._reset_form_state()
+        self.analysis_done.emit(results)
+
+    def _on_error(self, msg: str):
+        if self._proc_thread:
+            self._proc_thread.quit()
+            self._proc_thread.wait()
+        self._reset_form_state()
+        QMessageBox.critical(self, t('upload_error_title'),
+                             t('upload_error_msg').format(msg))
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+    def _reset_form_state(self):
+        self._analyze_btn.setEnabled(True)
+        self._progress_card.setVisible(False)
+        self._preview_lbl.setVisible(False)
+
+    def closeEvent(self, event):
+        self._cancel_analysis()
+        super().closeEvent(event)

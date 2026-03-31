@@ -2,8 +2,7 @@
 UI Components - Reusable widget classes for RULA application
 """
 
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QGroupBox, 
-                             QGridLayout, QMessageBox, QTextEdit)
+from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGroupBox, QGridLayout, QTextEdit
 from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtCore import Qt
 from datetime import datetime
@@ -13,9 +12,8 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # 使用非 GUI 後端
 import matplotlib.pyplot as plt
-from matplotlib import font_manager
 
-from .styles import *
+from .styles import SCORE_PANEL_STYLE, COORDINATES_PANEL_STYLE
 from .language import language_manager, t
 
 
@@ -300,8 +298,6 @@ class FrameRenderer:
             left_score: 左側分數
             right_score: 右側分數
         """
-        height, width = frame.shape[:2]
-        
         # 設置文字參數
         font = cv2.FONT_HERSHEY_SIMPLEX
         font_scale = 1.0

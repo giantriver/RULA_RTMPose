@@ -12,10 +12,12 @@ from .language import language_manager, t
 class RULAConfigDialog(QDialog):
     """Configuration dialog for RULA parameters with dropdown controls"""
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, current_backend_mode='MEDIAPIPE'):
         super().__init__(parent)
         self.lang = language_manager
         self.lang.add_observer(self.on_language_changed)
+        self.backend_modes = ['MEDIAPIPE', 'RTMW3D']
+        self.selected_backend_mode = current_backend_mode if current_backend_mode in self.backend_modes else 'MEDIAPIPE'
         
         self.setWindowTitle(t('config_title'))
         self.setMinimumSize(500, 450)
@@ -51,6 +53,28 @@ class RULAConfigDialog(QDialog):
         language_layout.addWidget(self.language_label)
         language_layout.addWidget(self.language_combo)
         layout.addLayout(language_layout)
+
+        # 姿勢偵測後端選擇
+        backend_layout = QHBoxLayout()
+        self.backend_label = QLabel(t('config_pose_backend'))
+        self.backend_label.setStyleSheet("font-weight: bold; color: #ecf0f1;")
+
+        self.backend_combo = QComboBox()
+        self.backend_combo.addItem(t('config_option_backend_mediapipe'), 'MEDIAPIPE')
+        self.backend_combo.addItem(t('config_option_backend_rtmw3d'), 'RTMW3D')
+
+        backend_index = self.backend_combo.findData(self.selected_backend_mode)
+        if backend_index >= 0:
+            self.backend_combo.setCurrentIndex(backend_index)
+
+        backend_layout.addWidget(self.backend_label)
+        backend_layout.addWidget(self.backend_combo)
+        layout.addLayout(backend_layout)
+
+        self.backend_desc_label = QLabel(t('config_pose_backend_desc'))
+        self.backend_desc_label.setStyleSheet("font-size: 11px; color: #95a5a6; margin-bottom: 8px;")
+        self.backend_desc_label.setWordWrap(True)
+        layout.addWidget(self.backend_desc_label)
 
         # 參數網格
         grid_layout = QGridLayout()
@@ -128,7 +152,7 @@ class RULAConfigDialog(QDialog):
         
         # 關閉按鈕
         self.close_button = QPushButton(t('config_cancel'))
-        self.close_button.clicked.connect(self.accept)
+        self.close_button.clicked.connect(self.reject)
         button_layout.addWidget(self.close_button)
         
         layout.addLayout(button_layout)
@@ -140,6 +164,8 @@ class RULAConfigDialog(QDialog):
         self.setWindowTitle(t('config_title'))
         self.title_label.setText(t('config_subtitle'))
         self.language_label.setText(t('config_language'))
+        self.backend_label.setText(t('config_pose_backend'))
+        self.backend_desc_label.setText(t('config_pose_backend_desc'))
         self.save_button.setText(t('config_save'))
         self.close_button.setText(t('config_cancel'))
 
@@ -151,6 +177,15 @@ class RULAConfigDialog(QDialog):
         selected_index = self.language_combo.findData(selected_lang)
         if selected_index >= 0:
             self.language_combo.setCurrentIndex(selected_index)
+
+        # 更新姿勢後端下拉選單顯示文字，保留目前選中的後端
+        selected_backend = self.backend_combo.currentData()
+        self.backend_combo.clear()
+        self.backend_combo.addItem(t('config_option_backend_mediapipe'), 'MEDIAPIPE')
+        self.backend_combo.addItem(t('config_option_backend_rtmw3d'), 'RTMW3D')
+        selected_backend_index = self.backend_combo.findData(selected_backend)
+        if selected_backend_index >= 0:
+            self.backend_combo.setCurrentIndex(selected_backend_index)
 
         # 更新參數名稱標籤
         for param_key, (label, name_key) in self.param_name_labels.items():
@@ -189,7 +224,15 @@ class RULAConfigDialog(QDialog):
         if selected_lang in ('en', 'zh_TW'):
             self.lang.set_language(selected_lang)
 
+        selected_backend = self.backend_combo.currentData()
+        if selected_backend in self.backend_modes:
+            self.selected_backend_mode = selected_backend
+
         self.accept()
+
+    def get_selected_backend_mode(self):
+        """取得使用者選擇的姿勢偵測後端。"""
+        return self.selected_backend_mode
 
 
 class LanguageSelectionDialog(QDialog):

@@ -250,6 +250,9 @@ class PoseDetector:
         Returns:
             bool: 是否成功偵測到骨架
         """
+        h, w = frame.shape[:2]
+        self._last_image_wh = (w, h)
+
         if self.backend_mode == 'RTMW3D':
             return self._process_rtmw3d(frame)
 
@@ -325,6 +328,36 @@ class PoseDetector:
         self.last_keypoints_2d = np.asarray(keypoints_2d)
         self.last_scores = np.asarray(scores)
         return True
+
+    def get_image_landmarks_2d(self):
+        """
+        取得正規化 (0-1) 的 2D 影像座標，供畫面上繪製骨架使用。
+
+        Returns:
+            list: 33 個 [x_norm, y_norm, conf] 或 None（未偵測到）
+        """
+        if self.backend_mode == 'RTMW3D':
+            if self.last_keypoints_2d is None or self.last_scores is None:
+                return None
+            w, h = getattr(self, '_last_image_wh', (1, 1))
+            if w <= 0 or h <= 0:
+                return None
+            selected_2d = np.asarray(self.last_keypoints_2d[0])   # [K, 2] pixel
+            selected_sc = np.asarray(self.last_scores[0]).reshape(-1)   # [K]
+            result = [[0.0, 0.0, 0.0] for _ in range(33)]
+            for dst_idx, src_idx in RTMW_TO_MEDIAPIPE.items():
+                if src_idx >= selected_2d.shape[0]:
+                    continue
+                x_px, y_px = float(selected_2d[src_idx, 0]), float(selected_2d[src_idx, 1])
+                conf = float(selected_sc[src_idx]) if src_idx < selected_sc.shape[0] else 0.0
+                result[dst_idx] = [x_px / w, y_px / h, max(0.0, min(1.0, conf))]
+            return result
+
+        # MediaPipe
+        if self.results is None or self.results.pose_landmarks is None:
+            return None
+        return [[lm.x, lm.y, lm.visibility]
+                for lm in self.results.pose_landmarks.landmark]
 
     def get_landmarks_array(self):
         """取得關鍵點陣列（用於 RULA 計算）。"""
