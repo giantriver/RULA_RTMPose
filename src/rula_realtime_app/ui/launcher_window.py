@@ -1,6 +1,10 @@
 """
-啟動選擇視窗
-讓使用者選擇「即時分析」或「上傳影片分析」
+系統首頁（模式選擇）視窗。
+
+提供三個主要入口：
+- 即時分析
+- 影片上傳分析
+- 分析歷史紀錄
 """
 
 from PyQt6.QtWidgets import (
@@ -79,10 +83,33 @@ class LauncherWindow(QMainWindow):
                 btn_style   = LAUNCH_BTN_BLUE,
                 callback    = self.upload_requested.emit,
             )
+        self._history_btn = QPushButton()
+        self._history_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._history_btn.setStyleSheet("""
+            QPushButton {
+                background: #eff6ff;
+                color: #1d4ed8;
+                border: 1px solid #93c5fd;
+                border-radius: 8px;
+                font-size: 15px;
+                font-weight: bold;
+                padding: 8px 12px;
+            }
+            QPushButton:hover {
+                background: #dbeafe;
+                border-color: #60a5fa;
+            }
+            QPushButton:pressed {
+                background: #bfdbfe;
+            }
+        """)
+        self._history_btn.clicked.connect(self.history_requested.emit)
+        upload_layout = upload_card.layout()
+        if upload_layout is not None:
+            upload_layout.addWidget(self._history_btn)
         cards_row.addWidget(upload_card)
 
         outer.addLayout(cards_row)
-        outer.addWidget(self._build_footer())
 
     # ── Header ────────────────────────────────────────────────────────────────
     def _build_header(self) -> QFrame:
@@ -209,34 +236,6 @@ class LauncherWindow(QMainWindow):
         col.addWidget(btn)
 
         return card, title_lbl, desc_lbl, btn
-
-    # ── Footer ────────────────────────────────────────────────────────────────
-    def _build_footer(self) -> QWidget:
-        row = QWidget()
-        layout = QHBoxLayout(row)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addStretch()
-
-        self._history_btn = QPushButton()
-        self._history_btn.setFlat(True)
-        self._history_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._history_btn.setStyleSheet("""
-            QPushButton {
-                color: rgba(255,255,255,0.7);
-                font-size: 13px;
-                border: none;
-                background: transparent;
-                padding: 4px 8px;
-            }
-            QPushButton:hover {
-                color: white;
-                text-decoration: underline;
-            }
-        """)
-        self._history_btn.clicked.connect(self.history_requested.emit)
-        layout.addWidget(self._history_btn)
-
-        return row
 
     # ── Language ──────────────────────────────────────────────────────────────
     def _show_language_dialog(self):

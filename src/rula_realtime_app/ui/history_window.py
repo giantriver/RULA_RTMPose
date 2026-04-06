@@ -1,6 +1,10 @@
 """
-分析紀錄查詢視窗
-對應 Vue 的 index.vue（分析記錄清單頁）
+分析歷史清單視窗。
+
+負責載入本機歷史 JSON，顯示每筆分析摘要，並提供：
+- 查看完整結果
+- 匯出 CSV
+- 刪除指定紀錄
 """
 
 import os
@@ -249,32 +253,35 @@ class HistoryWindow(QMainWindow):
             # Action buttons
             btn_widget = QWidget()
             btn_layout = QHBoxLayout(btn_widget)
-            btn_layout.setContentsMargins(4, 2, 4, 2)
-            btn_layout.setSpacing(6)
+            btn_layout.setContentsMargins(6, 4, 6, 4)
+            btn_layout.setSpacing(8)
 
             view_btn = QPushButton(t('history_view_btn'))
-            view_btn.setFixedSize(54, 28)
+            view_btn.setMinimumWidth(78)
+            view_btn.setFixedHeight(30)
             view_btn.setStyleSheet(BLUE_BTN_STYLE)
             view_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             view_btn.clicked.connect(lambda _, r=rec: self._on_view(r))
             btn_layout.addWidget(view_btn)
 
             export_btn = QPushButton(t('history_export_btn_text'))
-            export_btn.setFixedSize(54, 28)
+            export_btn.setMinimumWidth(78)
+            export_btn.setFixedHeight(30)
             export_btn.setStyleSheet(EMERALD_BTN_STYLE)
             export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             export_btn.clicked.connect(lambda _, r=rec: self._on_export(r))
             btn_layout.addWidget(export_btn)
 
             del_btn = QPushButton(t('history_delete_btn'))
-            del_btn.setFixedSize(54, 28)
+            del_btn.setMinimumWidth(78)
+            del_btn.setFixedHeight(30)
             del_btn.setStyleSheet(RED_BTN_STYLE)
             del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             del_btn.clicked.connect(lambda _, r=rec: self._on_delete(r))
             btn_layout.addWidget(del_btn)
 
             self._table.setCellWidget(row_idx, 8, btn_widget)
-            self._table.setRowHeight(row_idx, 42)
+            self._table.setRowHeight(row_idx, 46)
 
     # ── Actions ───────────────────────────────────────────────────────────────
     def _on_view(self, rec: dict):

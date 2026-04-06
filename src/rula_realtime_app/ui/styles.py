@@ -1,6 +1,8 @@
 """
-RULA Realtime UI Styles - Macro-based stylesheet generation
-Uses generator functions to reduce repetition and improve maintainability
+UI 樣式集中管理模組。
+
+以常數色票與樣式產生函式統一定義 PyQt 樣式字串，
+供首頁、即時視窗、上傳分析、歷史清單與結果頁共用。
 """
 
 # ============================================================================
@@ -202,6 +204,24 @@ MAIN_WINDOW_STYLE = f"""
             QLabel {{
                 color: {LIGHT_TEXT};
             }}
+            QMessageBox {{
+                background-color: #f8fafc;
+            }}
+            QMessageBox QLabel {{
+                color: #0f172a;
+                background: transparent;
+            }}
+            QMessageBox QPushButton {{
+                color: #0f172a;
+                background-color: #e2e8f0;
+                border: 1px solid #94a3b8;
+                border-radius: 6px;
+                padding: 6px 14px;
+                min-width: 72px;
+            }}
+            QMessageBox QPushButton:hover {{
+                background-color: #cbd5e1;
+            }}
         """
 
 # Button styles using macro (移除固定寬度以適應不同解析度)
@@ -296,6 +316,24 @@ LAUNCHER_BG_STYLE = """
         color: #ecf0f1;
         font-family: "Microsoft JhengHei", "微軟正黑體", Arial;
     }
+    QMessageBox {
+        background-color: #f8fafc;
+    }
+    QMessageBox QLabel {
+        color: #0f172a;
+        background: transparent;
+    }
+    QMessageBox QPushButton {
+        color: #0f172a;
+        background-color: #e2e8f0;
+        border: 1px solid #94a3b8;
+        border-radius: 6px;
+        padding: 6px 14px;
+        min-width: 72px;
+    }
+    QMessageBox QPushButton:hover {
+        background-color: #cbd5e1;
+    }
 """
 
 LAUNCHER_CENTRAL_STYLE = """
@@ -347,6 +385,24 @@ UPLOAD_BG_STYLE = """
     QWidget {
         color: #ecf0f1;
         font-family: "Microsoft JhengHei", "微軟正黑體", Arial;
+    }
+    QMessageBox {
+        background-color: #f8fafc;
+    }
+    QMessageBox QLabel {
+        color: #0f172a;
+        background: transparent;
+    }
+    QMessageBox QPushButton {
+        color: #0f172a;
+        background-color: #e2e8f0;
+        border: 1px solid #94a3b8;
+        border-radius: 6px;
+        padding: 6px 14px;
+        min-width: 72px;
+    }
+    QMessageBox QPushButton:hover {
+        background-color: #cbd5e1;
     }
 """
 

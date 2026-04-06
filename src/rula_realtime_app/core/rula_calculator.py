@@ -5,7 +5,7 @@ RULA 計算核心模組
 
 import numpy as np
 from .rula_tables import TABLE_A_DATA, TABLE_B_DATA, TABLE_C_DATA
-from .utils import safe_angle, safe_unit_vector, check_confidence
+from .utils import safe_angle, check_confidence
 from .config import RULA_CONFIG, TOLERANCE_ANGLE, USE_PREVIOUS_FRAME_ON_LOW_CONFIDENCE
 
 def rula_risk(point_score, wrist, trunk, upper_Shoulder, lower_Limb, neck,

@@ -1,5 +1,12 @@
 """
-UI Components - Reusable widget classes for RULA application
+UI 共用元件模組。
+
+提供即時視窗與結果輸出會用到的可重用元件與工具，包含：
+- ScorePanel：RULA 分數與角度顯示面板
+- CoordinatesPanel：關鍵點座標顯示面板
+- FrameRenderer：影像顯示縮放工具
+- SnapshotManager：快照與文字紀錄儲存
+- ChartGenerator：分數統計圖產生
 """
 
 from PyQt6.QtWidgets import QVBoxLayout, QLabel, QGroupBox, QGridLayout, QTextEdit

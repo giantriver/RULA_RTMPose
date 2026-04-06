@@ -8,7 +8,7 @@ import json
 import os
 from datetime import datetime
 
-from PyQt6.QtCore import QObject, QThread, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from .pose_detector import PoseDetector
 from . import angle_calc
@@ -94,10 +94,10 @@ class VideoFileProcessor(QObject):
                 rula_left  = None
                 rula_right = None
 
-                img_landmarks_2d = None
+                native_draw_data = None
                 if detected:
                     landmarks_arr    = detector.get_landmarks_array()
-                    img_landmarks_2d = detector.get_image_landmarks_2d()
+                    native_draw_data = detector.get_native_draw_data_2d()
                     rula_left, rula_right = angle_calc(
                         landmarks_arr, prev_left, prev_right
                     )
@@ -118,14 +118,53 @@ class VideoFileProcessor(QObject):
                 except (ValueError, TypeError):
                     pass
 
+                # Store backend-native draw payload so history/result page can
+                # re-render with the same renderer as realtime mode.
+                serializable_native_draw_data = None
+                if isinstance(native_draw_data, dict):
+                    backend_name = str(native_draw_data.get('backend', self.backend_mode)).upper()
+                    if backend_name == 'RTMW3D':
+                        kpts_norm = native_draw_data.get('keypoints_2d_norm') or []
+                        scores = native_draw_data.get('scores') or []
+                        serializable_native_draw_data = {
+                            'backend': 'RTMW3D',
+                            'keypoints_2d_norm': [],
+                            'scores': [],
+                        }
+                        for pt in kpts_norm:
+                            try:
+                                serializable_native_draw_data['keypoints_2d_norm'].append([
+                                    float(pt[0]), float(pt[1])
+                                ])
+                            except Exception:
+                                serializable_native_draw_data['keypoints_2d_norm'].append([0.0, 0.0])
+                        for sc in scores:
+                            try:
+                                serializable_native_draw_data['scores'].append(float(sc))
+                            except Exception:
+                                serializable_native_draw_data['scores'].append(0.0)
+                    elif backend_name == 'MEDIAPIPE':
+                        lms = native_draw_data.get('landmarks_2d') or []
+                        serializable_native_draw_data = {
+                            'backend': 'MEDIAPIPE',
+                            'landmarks_2d': [],
+                        }
+                        for lm in lms:
+                            try:
+                                serializable_native_draw_data['landmarks_2d'].append([
+                                    float(lm[0]), float(lm[1]), float(lm[2])
+                                ])
+                            except Exception:
+                                serializable_native_draw_data['landmarks_2d'].append([0.0, 0.0, 0.0])
+
                 records.append({
                     'frame':             frame_idx,
                     'timestamp':         round(frame_idx / fps, 3),
                     'best_score':        score_num,
                     'left_score':        rula_left.get('score', 'NULL')  if rula_left  else 'NULL',
                     'right_score':       rula_right.get('score', 'NULL') if rula_right else 'NULL',
-                    # 2D 正規化座標（供結果頁骨架繪製）；不存入 JSON 歷史
-                    'landmarks_2d':      img_landmarks_2d,
+                    # 原生繪圖資料（保存所有關節，供歷史重播）
+                    'native_draw_data':  serializable_native_draw_data,
                 })
 
                 # 進度（5% ~ 95%）
@@ -165,6 +204,7 @@ class VideoFileProcessor(QObject):
             'processed_frames': len(records),
             'fps':              fps,
             'frame_interval':   self.frame_interval,
+            'backend_mode':     (self.backend_mode or 'MEDIAPIPE').upper(),
             'rula_params':      dict(RULA_CONFIG),
             'records':          records,
             'stats': {
@@ -188,21 +228,15 @@ def ensure_history_dir():
 
 
 def save_analysis(results: dict) -> str:
-    """將分析結果儲存為 JSON，回傳檔案路徑（landmarks_2d 不存入）"""
-    import copy
+    """將分析結果儲存為 JSON，回傳檔案路徑（含 native_draw_data）。"""
     ensure_history_dir()
     ts  = datetime.now().strftime('%Y%m%d_%H%M%S')
     name = os.path.basename(results.get('video_path', 'unknown'))
     safe = ''.join(c if c.isalnum() or c in '-_.' else '_' for c in name)[:40]
     path = os.path.join(HISTORY_DIR, f'{ts}_{safe}.json')
 
-    # Deep-copy and strip non-serialisable landmark data
-    serialisable = copy.deepcopy(results)
-    for rec in serialisable.get('records', []):
-        rec.pop('landmarks_2d', None)
-
     with open(path, 'w', encoding='utf-8') as f:
-        json.dump(serialisable, f, ensure_ascii=False, indent=2)
+        json.dump(results, f, ensure_ascii=False, indent=2)
     return path
 
 

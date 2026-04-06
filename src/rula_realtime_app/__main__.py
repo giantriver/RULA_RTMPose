@@ -51,7 +51,7 @@ class AppController:
             self._launcher.realtime_requested.connect(self._show_realtime)
             self._launcher.upload_requested.connect(self._show_upload)
             self._launcher.history_requested.connect(self._show_history)
-        self._launcher.show()
+        self._launcher.showMaximized()
 
     # ── Real-time analysis ───────────────────────────────────────────────────
     def _show_realtime(self):
@@ -60,7 +60,7 @@ class AppController:
             self._realtime = MainWindow()
             self._realtime.back_requested.connect(self._on_realtime_back)
             self._realtime.destroyed.connect(self._on_realtime_closed)
-        self._realtime.show()
+        self._realtime.showMaximized()
         self._realtime.activateWindow()
 
     def _on_realtime_back(self):
@@ -81,7 +81,7 @@ class AppController:
             self._upload.back_requested.connect(self._on_upload_back)
             self._upload.analysis_done.connect(self._open_result_window)
             self._upload.destroyed.connect(lambda: setattr(self, '_upload', None))
-        self._upload.show()
+        self._upload.showMaximized()
         self._upload.activateWindow()
 
     def _on_upload_back(self):
@@ -95,7 +95,7 @@ class AppController:
         win = ResultWindow(results)
         win.back_requested.connect(lambda w=win: self._close_result_window(w))
         self._result_windows.append(win)
-        win.show()
+        win.showMaximized()
         win.activateWindow()
 
     def _close_result_window(self, win: ResultWindow):
@@ -112,7 +112,7 @@ class AppController:
             self._history.back_requested.connect(self._on_history_back)
             self._history.view_requested.connect(self._open_result_window)
             self._history.destroyed.connect(lambda: setattr(self, '_history', None))
-        self._history.show()
+        self._history.showMaximized()
         self._history.activateWindow()
 
     def _on_history_back(self):
@@ -151,7 +151,7 @@ def main():
 
     if args.realtime:
         window = MainWindow()
-        window.show()
+        window.showMaximized()
     else:
         controller = AppController()
         controller.start()

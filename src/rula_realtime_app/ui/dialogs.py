@@ -1,9 +1,15 @@
 """
-Dialog windows for RULA application
+對話框模組。
+
+提供系統設定相關對話框，主要包含：
+- RULA 固定參數設定（Table A/B 參數）
+- 即時姿勢辨識後端切換（MediaPipe / RTMW3D）
+- 語言切換與套用
 """
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-                             QGridLayout, QPushButton, QRadioButton, QButtonGroup)
+                             QGridLayout, QPushButton, QRadioButton, QButtonGroup,
+                             QScrollArea, QWidget, QFrame)
 from ..core import config
 from .styles import RULA_CONFIG_DIALOG_STYLE
 from .language import language_manager, t
@@ -20,20 +26,71 @@ class RULAConfigDialog(QDialog):
         self.selected_backend_mode = current_backend_mode if current_backend_mode in self.backend_modes else 'MEDIAPIPE'
         
         self.setWindowTitle(t('config_title'))
-        self.setMinimumSize(500, 450)
+        self.setMinimumSize(420, 360)
+        self.resize(500, 560)
         self.setStyleSheet(RULA_CONFIG_DIALOG_STYLE)
         
         # Store references to combo boxes for retrieval
         self.combos = {}
         
         layout = QVBoxLayout()
-        layout.setSpacing(15)
+        layout.setSpacing(10)
         layout.setContentsMargins(20, 20, 20, 20)
+
+        scroll = QScrollArea()
+        scroll.setObjectName('configScroll')
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("""
+            QScrollArea#configScroll {
+                background-color: rgba(52, 73, 94, 0.35);
+                border: 1px solid #3f5b73;
+                border-radius: 10px;
+            }
+            QScrollArea#configScroll > QWidget > QWidget {
+                background-color: #2c3e50;
+                border-radius: 8px;
+            }
+            QScrollBar:vertical {
+                background: #34495e;
+                width: 10px;
+                margin: 8px 2px 8px 2px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background: #5dade2;
+                min-height: 28px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #85c1e9;
+            }
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QScrollBar::add-page:vertical,
+            QScrollBar::sub-page:vertical {
+                background: transparent;
+            }
+        """)
+
+        content_widget = QWidget()
+        content_widget.setObjectName('configContent')
+        content_widget.setStyleSheet("""
+            QWidget#configContent {
+                background-color: rgba(44, 62, 80, 0.92);
+                border-radius: 8px;
+            }
+        """)
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setSpacing(12)
+        content_layout.setContentsMargins(0, 0, 8, 0)
         
         # 標題
         self.title_label = QLabel(t('config_subtitle'))
         self.title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #3498db; margin-bottom: 10px;")
-        layout.addWidget(self.title_label)
+        content_layout.addWidget(self.title_label)
 
         # 語言選擇
         language_layout = QHBoxLayout()
@@ -52,7 +109,7 @@ class RULAConfigDialog(QDialog):
 
         language_layout.addWidget(self.language_label)
         language_layout.addWidget(self.language_combo)
-        layout.addLayout(language_layout)
+        content_layout.addLayout(language_layout)
 
         # 姿勢偵測後端選擇
         backend_layout = QHBoxLayout()
@@ -69,12 +126,12 @@ class RULAConfigDialog(QDialog):
 
         backend_layout.addWidget(self.backend_label)
         backend_layout.addWidget(self.backend_combo)
-        layout.addLayout(backend_layout)
+        content_layout.addLayout(backend_layout)
 
         self.backend_desc_label = QLabel(t('config_pose_backend_desc'))
         self.backend_desc_label.setStyleSheet("font-size: 11px; color: #95a5a6; margin-bottom: 8px;")
         self.backend_desc_label.setWordWrap(True)
-        layout.addWidget(self.backend_desc_label)
+        content_layout.addWidget(self.backend_desc_label)
 
         # 參數網格
         grid_layout = QGridLayout()
@@ -138,8 +195,11 @@ class RULAConfigDialog(QDialog):
             self.param_desc_labels[param_key] = (desc_label, desc_key)
             row += 1
         
-        layout.addLayout(grid_layout)
-        layout.addStretch()
+        content_layout.addLayout(grid_layout)
+        content_layout.addStretch()
+
+        scroll.setWidget(content_widget)
+        layout.addWidget(scroll, 1)
         
         # 按鈕佈局
         button_layout = QHBoxLayout()

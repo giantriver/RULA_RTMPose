@@ -1,6 +1,8 @@
 """
-多语言支持模块
-支持英文 (en) 和繁体中文 (zh_TW)
+多語系文字管理模組。
+
+提供集中式語言狀態與翻譯字典查詢，透過觀察者機制通知各視窗更新文字。
+目前支援英文（en）與繁體中文（zh_TW）。
 """
 
 class LanguageManager:
@@ -692,8 +694,8 @@ TRANSLATIONS = {
         'zh_TW': '選擇影片分析'
     },
     'launcher_history_btn': {
-        'en': '📋  View Records',
-        'zh_TW': '📋  查看分析紀錄'
+        'en': 'View Records',
+        'zh_TW': '查看分析紀錄'
     },
 
     # ── Upload window ────────────────────────────────────────────────────────
@@ -984,6 +986,18 @@ TRANSLATIONS = {
     'result_bar_y': {
         'en': 'Frames',
         'zh_TW': '幀數'
+    },
+    'result_tab_trend': {
+        'en': 'Score Trend',
+        'zh_TW': '分數趨勢'
+    },
+    'result_tab_bar': {
+        'en': 'Bar Distribution',
+        'zh_TW': '長條分布'
+    },
+    'result_tab_pie': {
+        'en': 'Pie Distribution',
+        'zh_TW': '圓餅分布'
     },
     'result_export_dialog_title': {
         'en': 'Save CSV Report',

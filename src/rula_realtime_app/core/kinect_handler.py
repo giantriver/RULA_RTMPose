@@ -16,10 +16,11 @@ except ImportError:
 
 from .config import (
     KINECT_TO_MEDIAPIPE, 
-    K4ABT, 
     load_kinect_libraries,
     KINECT_RESOLUTION,
-    KINECT_DEPTH_MODE
+    KINECT_DEPTH_MODE,
+    resolve_kinect_color_resolution,
+    resolve_kinect_depth_mode,
 )
 
 
@@ -79,33 +80,13 @@ class KinectHandler(QThread):
             # 3. 修改相機配置
             device_config = pykinect.default_configuration
             
-            # 根據配置設定分辨率
-            if KINECT_RESOLUTION == "720P":
-                device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_720P
-            elif KINECT_RESOLUTION == "1080P":
-                device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_1080P
-            elif KINECT_RESOLUTION == "1440P":
-                device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_1440P
-            elif KINECT_RESOLUTION == "1536P":
-                device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_1536P
-            elif KINECT_RESOLUTION == "2160P":
-                device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_2160P
-            elif KINECT_RESOLUTION == "3072P":
-                device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_3072P
-            else:
-                device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_1080P
-            
-            # 根據配置設定深度模式
-            if KINECT_DEPTH_MODE == "NFOV_2x2BINNED":
-                device_config.depth_mode = pykinect.K4A_DEPTH_MODE_NFOV_2X2BINNED
-            elif KINECT_DEPTH_MODE == "NFOV_UNBINNED":
-                device_config.depth_mode = pykinect.K4A_DEPTH_MODE_NFOV_UNBINNED
-            elif KINECT_DEPTH_MODE == "WFOV_2x2BINNED":
-                device_config.depth_mode = pykinect.K4A_DEPTH_MODE_WFOV_2X2BINNED
-            elif KINECT_DEPTH_MODE == "WFOV_UNBINNED":
-                device_config.depth_mode = pykinect.K4A_DEPTH_MODE_WFOV_UNBINNED
-            else:
-                device_config.depth_mode = pykinect.K4A_DEPTH_MODE_WFOV_2X2BINNED
+            # 根據配置設定分辨率與深度模式
+            device_config.color_resolution = resolve_kinect_color_resolution(
+                pykinect, KINECT_RESOLUTION
+            )
+            device_config.depth_mode = resolve_kinect_depth_mode(
+                pykinect, KINECT_DEPTH_MODE
+            )
             
             # 4. 啟動設備
             try:

@@ -1,10 +1,17 @@
 """
-主視窗 UI
+即時分析主視窗模組。
+
+整合相機串流、姿勢辨識與 RULA 評分顯示流程，並提供：
+- 開始/停止/暫停偵測
+- 即時分數與角度面板
+- 快照與錄影
+- 後端與參數設定
 """
 
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                              QPushButton, QLabel, QMessageBox)
 from PyQt6.QtCore import Qt, QTimer, QThread, pyqtSignal
+from PyQt6.QtGui import QPixmap
 import cv2
 import os
 from datetime import datetime
@@ -71,6 +78,7 @@ class MainWindow(QMainWindow):
         self.kinect_rgb_handler = None
         self._frame_proc_worker = None
         self._frame_proc_thread = None
+        self.is_detection_active = False
         # KINECT: 不需要 PoseDetector（由 Kinect SDK 負責骨架）
         # RTMW3D: 延遲到 worker 執行緒才初始化（ONNX 模型載入很慢，不能阻塞主執行緒）
         # MEDIAPIPE/WEBCAM: 直接初始化（速度快，~100ms）
@@ -311,6 +319,7 @@ class MainWindow(QMainWindow):
                 self.on_error("Azure Kinect 不可用，請檢查 SDK 安裝")
                 return
             
+            self.is_detection_active = True
             self.kinect_handler = KinectHandler()
             self.kinect_handler.frame_ready.connect(self.on_kinect_frame_ready)
             self.kinect_handler.error_occurred.connect(self.on_error)
@@ -321,12 +330,14 @@ class MainWindow(QMainWindow):
                 self.on_error("Kinect RGB 不可用，請檢查 SDK 安裝")
                 return
             
+            self.is_detection_active = True
             self.kinect_rgb_handler = KinectRGBHandler()
             self.kinect_rgb_handler.frame_ready.connect(self.on_frame_ready)
             self.kinect_rgb_handler.error_occurred.connect(self.on_error)
             self.kinect_rgb_handler.start()
         elif self.camera_mode == "RTMW3D":
             # 使用一般攝像頭 + RTMW3D
+            self.is_detection_active = True
             self.camera_handler = CameraHandler(camera_index=core_config.WEBCAM_INDEX)
             self.camera_handler.error_occurred.connect(self.on_error)
             self._start_frame_processor()
@@ -338,6 +349,7 @@ class MainWindow(QMainWindow):
             self.camera_handler.start()
         else:  # self.camera_mode == "WEBCAM"
             # 使用攝像頭 + MediaPipe
+            self.is_detection_active = True
             self.camera_handler = CameraHandler(camera_index=core_config.WEBCAM_INDEX)
             self.camera_handler.error_occurred.connect(self.on_error)
             self._start_frame_processor()
@@ -384,6 +396,9 @@ class MainWindow(QMainWindow):
 
     def stop_detection(self):
         """停止辨識"""
+        # 先標記為未啟動，避免停止過程中的延遲訊號再次更新畫面
+        self.is_detection_active = False
+
         # 停止攝像頭
         if self.camera_handler:
             try:
@@ -443,7 +458,9 @@ class MainWindow(QMainWindow):
         self.rula_freq_label.setText(t('rula_freq_label').format('0.0'))
         
         # 重置顯示
-        self.video_label.setText(t('status_stopped'))
+        self.video_label.setPixmap(QPixmap())
+        self.video_label.setText(t('status_waiting'))
+        self.current_frame = None
         
         # 根據顯示模式重置面板
         if self.display_mode == "RULA":
@@ -470,7 +487,7 @@ class MainWindow(QMainWindow):
         接收 FrameProcessorWorker 處理完的結果（只做 UI 更新，不做任何 ML 推論）。
         此方法在主執行緒執行。
         """
-        if self.is_paused:
+        if not self.is_detection_active or self.is_paused:
             return
 
         self.current_frame = annotated
@@ -510,7 +527,7 @@ class MainWindow(QMainWindow):
             pose: 骨架關鍵點列表 (MediaPipe 格式) 或 None
         """
         # 如果暫停，則不更新顯示
-        if self.is_paused:
+        if not self.is_detection_active or self.is_paused:
             return
         
         self.current_frame = frame

@@ -44,8 +44,19 @@ def get_best_rula_score(rula_left, rula_right):
     }
     
     try:
-        left_score = int(rula_left.get('score', 0)) if rula_left.get('score') != "NULL" else None
-        right_score = int(rula_right.get('score', 0)) if rula_right.get('score') != "NULL" else None
+        def _parse_score(side_result):
+            if not isinstance(side_result, dict):
+                return None
+            score = side_result.get('score')
+            if score in (None, 'NULL', ''):
+                return None
+            try:
+                return int(score)
+            except (ValueError, TypeError):
+                return None
+
+        left_score = _parse_score(rula_left)
+        right_score = _parse_score(rula_right)
         
         if left_score is not None and right_score is not None:
             if left_score >= right_score:

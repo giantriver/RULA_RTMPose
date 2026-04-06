@@ -14,7 +14,13 @@ except ImportError:
     KINECT_AVAILABLE = False
     print("警告: pykinect_azure 未安裝，無法使用 Azure Kinect")
 
-from .config import load_kinect_libraries, KINECT_RESOLUTION, KINECT_DEPTH_MODE
+from .config import (
+    load_kinect_libraries,
+    KINECT_RESOLUTION,
+    KINECT_DEPTH_MODE,
+    resolve_kinect_color_resolution,
+    resolve_kinect_depth_mode,
+)
 
 
 class KinectRGBHandler(QThread):
@@ -53,33 +59,13 @@ class KinectRGBHandler(QThread):
             # 3. 配置相機
             device_config = pykinect.default_configuration
             
-            # 根據配置設定分辨率
-            if KINECT_RESOLUTION == "720P":
-                device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_720P
-            elif KINECT_RESOLUTION == "1080P":
-                device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_1080P
-            elif KINECT_RESOLUTION == "1440P":
-                device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_1440P
-            elif KINECT_RESOLUTION == "1536P":
-                device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_1536P
-            elif KINECT_RESOLUTION == "2160P":
-                device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_2160P
-            elif KINECT_RESOLUTION == "3072P":
-                device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_3072P
-            else:
-                device_config.color_resolution = pykinect.K4A_COLOR_RESOLUTION_1080P
-            
-            # 深度模式（即使不使用深度，也需要設定）
-            if KINECT_DEPTH_MODE == "NFOV_2x2BINNED":
-                device_config.depth_mode = pykinect.K4A_DEPTH_MODE_NFOV_2X2BINNED
-            elif KINECT_DEPTH_MODE == "NFOV_UNBINNED":
-                device_config.depth_mode = pykinect.K4A_DEPTH_MODE_NFOV_UNBINNED
-            elif KINECT_DEPTH_MODE == "WFOV_2x2BINNED":
-                device_config.depth_mode = pykinect.K4A_DEPTH_MODE_WFOV_2X2BINNED
-            elif KINECT_DEPTH_MODE == "WFOV_UNBINNED":
-                device_config.depth_mode = pykinect.K4A_DEPTH_MODE_WFOV_UNBINNED
-            else:
-                device_config.depth_mode = pykinect.K4A_DEPTH_MODE_WFOV_2X2BINNED
+            # 根據配置設定分辨率與深度模式（即使不使用深度，也需要設定）
+            device_config.color_resolution = resolve_kinect_color_resolution(
+                pykinect, KINECT_RESOLUTION
+            )
+            device_config.depth_mode = resolve_kinect_depth_mode(
+                pykinect, KINECT_DEPTH_MODE
+            )
             
             # 4. 啟動設備
             try:

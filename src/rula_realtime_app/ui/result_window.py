@@ -1,22 +1,29 @@
 """
-分析結果視窗（獨立頁面）
-對應 Vue [id].vue：含骨架疊加的採樣畫面播放、上下幀切換、
-折線圖點擊跳幀、長條圖、統計卡片。
+影片分析結果視窗模組。
+
+負責呈現離線分析完成後的結果頁，包含：
+- 取樣幀播放與骨架疊加檢視
+- 分數折線圖與分布長條圖
+- 關鍵統計資訊卡片
+- 匯出 CSV
 """
 
 import os
 import cv2
 import numpy as np
+import mediapipe as mp
+from mediapipe.framework.formats import landmark_pb2
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+from matplotlib import font_manager
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFrame, QSizePolicy, QCheckBox,
-    QFileDialog, QMessageBox, QScrollArea, QSplitter
+    QFileDialog, QMessageBox, QScrollArea, QSplitter, QSlider, QTabWidget
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap, QFont
@@ -29,23 +36,6 @@ from .styles import (
 from .language import language_manager, t
 
 
-# ──────────────────────────────────────────────────────────────────────────────
-# MediaPipe standard pose connections (33 keypoints)
-# ──────────────────────────────────────────────────────────────────────────────
-_POSE_CONNECTIONS = [
-    (0, 1), (1, 2), (2, 3), (3, 7),
-    (0, 4), (4, 5), (5, 6), (6, 8),
-    (9, 10),
-    (11, 12),
-    (11, 13), (13, 15), (15, 17), (15, 19), (17, 19),
-    (12, 14), (14, 16), (16, 18), (16, 20), (18, 20),
-    (15, 21), (16, 22),
-    (11, 23), (12, 24), (23, 24),
-    (23, 25), (25, 27), (27, 29), (27, 31), (29, 31),
-    (24, 26), (26, 28), (28, 30), (28, 32), (30, 32),
-]
-_RULA_KEYPOINTS = {0, 7, 8, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23, 24}
-
 _SCORE_COLORS = {
     1: ('#d1fae5', '#065f46'), 2: ('#d1fae5', '#065f46'),
     3: ('#fef3c7', '#92400e'), 4: ('#fef3c7', '#92400e'),
@@ -54,35 +44,92 @@ _SCORE_COLORS = {
 }
 
 
-def _draw_skeleton(frame_rgb: np.ndarray,
-                   landmarks_2d: list,
-                   threshold: float = 0.25) -> np.ndarray:
-    """
-    landmarks_2d: list of [x_norm, y_norm, conf] × 33 (normalized 0–1)
-    Returns a new RGB frame with skeleton drawn.
-    """
-    out = frame_rgb.copy()
-    h, w = out.shape[:2]
+def _setup_matplotlib_cjk_font() -> None:
+    """Set a CJK-capable font so Chinese labels render in matplotlib."""
+    candidates = [
+        'Microsoft JhengHei',
+        'Microsoft YaHei',
+        'Noto Sans CJK TC',
+        'PingFang TC',
+        'Heiti TC',
+        'SimHei',
+    ]
+    available = {f.name for f in font_manager.fontManager.ttflist}
+    for font_name in candidates:
+        if font_name in available:
+            matplotlib.rcParams['font.family'] = [font_name, 'DejaVu Sans']
+            break
+    else:
+        matplotlib.rcParams['font.family'] = ['DejaVu Sans']
 
-    for (i, j) in _POSE_CONNECTIONS:
-        if i >= len(landmarks_2d) or j >= len(landmarks_2d):
-            continue
-        li, lj = landmarks_2d[i], landmarks_2d[j]
-        if li[2] < threshold or lj[2] < threshold:
-            continue
-        xi, yi = int(li[0] * w), int(li[1] * h)
-        xj, yj = int(lj[0] * w), int(lj[1] * h)
-        cv2.line(out, (xi, yi), (xj, yj), (0, 230, 118), 2)
+    # Avoid garbled minus signs when using CJK fonts.
+    matplotlib.rcParams['axes.unicode_minus'] = False
 
-    for k, lm in enumerate(landmarks_2d):
-        if lm[2] < threshold:
-            continue
-        x, y = int(lm[0] * w), int(lm[1] * h)
-        radius = 5 if k in _RULA_KEYPOINTS else 3
-        color  = (255, 82, 82) if k in _RULA_KEYPOINTS else (255, 180, 0)
-        cv2.circle(out, (x, y), radius, color, -1)
 
-    return out
+_setup_matplotlib_cjk_font()
+
+
+def _draw_mediapipe_skeleton(frame_rgb: np.ndarray,
+                             landmarks_2d: list,
+                             min_visibility: float = 0.0) -> np.ndarray:
+    """Draw MediaPipe skeleton with MediaPipe's native drawer."""
+    if not landmarks_2d or len(landmarks_2d) < 33:
+        return frame_rgb
+
+    annotated = frame_rgb.copy()
+    lm_proto = landmark_pb2.NormalizedLandmarkList()
+    for lm in landmarks_2d:
+        if len(lm) < 3:
+            continue
+        lm_proto.landmark.add(
+            x=float(lm[0]),
+            y=float(lm[1]),
+            z=0.0,
+            visibility=float(lm[2]),
+            presence=float(lm[2]),
+        )
+
+    mp.solutions.drawing_utils.draw_landmarks(
+        annotated,
+        lm_proto,
+        mp.solutions.pose.POSE_CONNECTIONS,
+        landmark_drawing_spec=mp.solutions.drawing_styles.get_default_pose_landmarks_style(),
+    )
+    return annotated
+
+
+def _draw_rtmw_skeleton(frame_rgb: np.ndarray,
+                        keypoints_2d_norm: list,
+                        scores: list,
+                        kpt_threshold: float = 0.3) -> np.ndarray:
+    """Draw RTMW skeleton with rtmlib native drawer."""
+    if not keypoints_2d_norm or not scores:
+        return frame_rgb
+
+    try:
+        from rtmlib import draw_skeleton
+    except Exception:
+        return frame_rgb
+
+    h, w = frame_rgb.shape[:2]
+    kpts_px = []
+    for pt in keypoints_2d_norm:
+        if len(pt) < 2:
+            kpts_px.append([0.0, 0.0])
+            continue
+        kpts_px.append([float(pt[0]) * w, float(pt[1]) * h])
+
+    kpts_arr = np.asarray([kpts_px], dtype=np.float32)
+    scores_arr = np.asarray([scores], dtype=np.float32)
+
+    image_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+    drawn_bgr = draw_skeleton(
+        image_bgr,
+        kpts_arr,
+        scores_arr,
+        kpt_thr=kpt_threshold,
+    )
+    return cv2.cvtColor(drawn_bgr, cv2.COLOR_BGR2RGB)
 
 
 def _frame_rgb_from_video(cap: cv2.VideoCapture,
@@ -113,6 +160,7 @@ class ResultWindow(QMainWindow):
         self._results   = results
         self._records   = results.get('records', [])
         self._video_path = results.get('video_path', '')
+        self._backend_mode = str(results.get('backend_mode', 'MEDIAPIPE')).upper()
         self._cap: cv2.VideoCapture | None = None
 
         # playback state
@@ -289,8 +337,37 @@ class ResultWindow(QMainWindow):
         self._next_btn.clicked.connect(self._next_frame)
         nav_row.addWidget(self._next_btn)
 
+        self._score_badge = QLabel('RULA: —')
+        self._score_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._score_badge.setFixedHeight(24)
+        self._score_badge.setStyleSheet(
+            'background:#e2e8f0; color:#475569; border-radius:10px;'
+            'padding:0 12px; font-size:12px; font-weight:bold;'
+        )
+        nav_row.addWidget(self._score_badge)
         nav_row.addStretch()
         cc.addLayout(nav_row)
+
+        # Frame scrub slider
+        n = max(1, len(self._records) - 1)
+        self._frame_slider = QSlider(Qt.Orientation.Horizontal)
+        self._frame_slider.setMinimum(0)
+        self._frame_slider.setMaximum(n)
+        self._frame_slider.setValue(0)
+        self._frame_slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                height: 4px; background: #e2e8f0; border-radius: 2px;
+            }
+            QSlider::handle:horizontal {
+                width: 14px; height: 14px; margin: -5px 0;
+                background: #2563eb; border-radius: 7px;
+            }
+            QSlider::sub-page:horizontal {
+                background: #2563eb; border-radius: 2px;
+            }
+        """)
+        self._frame_slider.valueChanged.connect(self._on_slider_changed)
+        cc.addWidget(self._frame_slider)
 
         info_row = QHBoxLayout()
         self._frame_counter_lbl = QLabel()
@@ -300,15 +377,6 @@ class ResultWindow(QMainWindow):
         self._ts_lbl = QLabel()
         self._ts_lbl.setStyleSheet('color: #64748b; font-size: 12px;')
         info_row.addWidget(self._ts_lbl)
-
-        self._score_badge = QLabel('RULA: —')
-        self._score_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._score_badge.setFixedHeight(24)
-        self._score_badge.setStyleSheet(
-            'background:#e2e8f0; color:#475569; border-radius:10px;'
-            'padding:0 12px; font-size:12px; font-weight:bold;'
-        )
-        info_row.addWidget(self._score_badge)
         info_row.addStretch()
         cc.addLayout(info_row)
 
@@ -329,8 +397,7 @@ class ResultWindow(QMainWindow):
         col.setContentsMargins(8, 0, 0, 0)
 
         col.addWidget(self._build_stat_cards())
-        col.addWidget(self._build_line_chart_card())
-        col.addWidget(self._build_bar_chart_card())
+        col.addWidget(self._build_chart_tabs())
         col.addStretch()
 
         scroll.setWidget(inner)
@@ -369,52 +436,69 @@ class ResultWindow(QMainWindow):
         ]
 
         self._stat_label_widgets = []  # keep refs to label QLabels for retranslation
-        grid = QGridLayout()
-        grid.setSpacing(8)
-        for idx, (value, _key, tc, bg) in enumerate(self._stat_items):
-            r, c = divmod(idx, 2)
+        stat_row = QHBoxLayout()
+        stat_row.setSpacing(6)
+        for value, _key, tc, bg in self._stat_items:
             cell = QFrame()
             cell.setStyleSheet(f'QFrame {{ background:{bg}; border-radius:8px; }}'
                                'QLabel { background:transparent; }')
+            cell.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             cl = QVBoxLayout(cell)
-            cl.setContentsMargins(10, 8, 10, 8)
+            cl.setContentsMargins(8, 6, 8, 6)
+            cl.setSpacing(2)
             vl = QLabel(value)
-            vl.setFont(QFont('Microsoft JhengHei', 16, QFont.Weight.Bold))
+            vl.setFont(QFont('Microsoft JhengHei', 13, QFont.Weight.Bold))
             vl.setStyleSheet(f'color:{tc};')
             vl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             ll = QLabel()
-            ll.setStyleSheet(f'color:{tc}; font-size:11px;')
+            ll.setStyleSheet(f'color:{tc}; font-size:10px;')
             ll.setAlignment(Qt.AlignmentFlag.AlignCenter)
             cl.addWidget(vl)
             cl.addWidget(ll)
-            grid.addWidget(cell, r, c)
+            stat_row.addWidget(cell)
             self._stat_label_widgets.append(ll)
 
-        col.addLayout(grid)
+        col.addLayout(stat_row)
         return card
 
-    # ── Line chart (click → jump to frame) ───────────────────────────────────
-    def _build_line_chart_card(self) -> QFrame:
+    # ── Chart tabs (Trend / Bar / Pie) ───────────────────────────────────────
+    def _build_chart_tabs(self) -> QFrame:
         card = QFrame()
         card.setObjectName('content_card')
-        card.setStyleSheet(CONTENT_CARD_STYLE + 'QLabel { color: #0f172a; }'
-                           'QCheckBox { color: #0f172a; }')
+        card.setStyleSheet(CONTENT_CARD_STYLE)
         col = QVBoxLayout(card)
         col.setContentsMargins(14, 12, 14, 12)
         col.setSpacing(8)
 
-        hdr = QHBoxLayout()
-        self._chart_title_lbl = QLabel()
-        self._chart_title_lbl.setFont(QFont('Microsoft JhengHei', 13, QFont.Weight.Bold))
-        self._chart_title_lbl.setStyleSheet('color: #0f172a;')
-        hdr.addWidget(self._chart_title_lbl)
-        hdr.addStretch()
-        col.addLayout(hdr)
+        self._chart_tabs = QTabWidget()
+        self._chart_tabs.setStyleSheet("""
+            QTabWidget::pane { border: none; background: transparent; }
+            QTabBar::tab {
+                padding: 6px 18px; font-size: 12px; color: #64748b;
+                background: #f1f5f9; border-radius: 6px; margin-right: 4px;
+            }
+            QTabBar::tab:selected { background: #2563eb; color: #ffffff; font-weight: bold; }
+            QTabBar::tab:hover:!selected { background: #e2e8f0; }
+        """)
+
+        self._chart_tabs.addTab(self._build_line_tab(), '')
+        self._chart_tabs.addTab(self._build_bar_tab(),  '')
+        self._chart_tabs.addTab(self._build_pie_tab(),  '')
+
+        col.addWidget(self._chart_tabs)
+        return card
+
+    def _build_line_tab(self) -> QWidget:
+        w = QWidget()
+        w.setStyleSheet('background: transparent;')
+        col = QVBoxLayout(w)
+        col.setContentsMargins(0, 8, 0, 0)
+        col.setSpacing(0)
 
         xs = [r['timestamp']  for r in self._records if isinstance(r.get('best_score'), int)]
         ys = [r['best_score'] for r in self._records if isinstance(r.get('best_score'), int)]
 
-        self._line_fig, self._line_ax = plt.subplots(figsize=(5.5, 2.8))
+        self._line_fig, self._line_ax = plt.subplots(figsize=(5.5, 3.2))
         self._line_fig.patch.set_facecolor('#ffffff')
         self._line_ax.set_facecolor('#ffffff')
 
@@ -429,34 +513,26 @@ class ResultWindow(QMainWindow):
 
         self._vline = self._line_ax.axvline(x=0, color='#ef4444',
                                              linewidth=1.5, linestyle='--', alpha=0.7)
-
         self._line_ax.tick_params(colors='#64748b', labelsize=8)
         for spine in self._line_ax.spines.values():
             spine.set_visible(False)
         self._line_ax.yaxis.grid(True, linestyle='--', alpha=0.4, color='#e2e8f0')
         self._line_ax.set_axisbelow(True)
-        plt.tight_layout()
+        # Keep extra margins so translated axis labels are not clipped.
+        self._line_fig.subplots_adjust(left=0.11, right=0.98, top=0.96, bottom=0.18)
 
         self._line_canvas = FigureCanvas(self._line_fig)
-        self._line_canvas.setFixedHeight(220)
+        self._line_canvas.setFixedHeight(300)
         self._line_canvas.mpl_connect('button_press_event', self._on_chart_click)
         col.addWidget(self._line_canvas)
+        return w
 
-        return card
-
-    # ── Bar chart ─────────────────────────────────────────────────────────────
-    def _build_bar_chart_card(self) -> QFrame:
-        card = QFrame()
-        card.setObjectName('content_card')
-        card.setStyleSheet(CONTENT_CARD_STYLE + 'QLabel { color: #0f172a; }')
-        col = QVBoxLayout(card)
-        col.setContentsMargins(14, 12, 14, 12)
-        col.setSpacing(8)
-
-        self._bar_title_lbl = QLabel()
-        self._bar_title_lbl.setFont(QFont('Microsoft JhengHei', 13, QFont.Weight.Bold))
-        self._bar_title_lbl.setStyleSheet('color: #0f172a;')
-        col.addWidget(self._bar_title_lbl)
+    def _build_bar_tab(self) -> QWidget:
+        w = QWidget()
+        w.setStyleSheet('background: transparent;')
+        col = QVBoxLayout(w)
+        col.setContentsMargins(0, 8, 0, 0)
+        col.setSpacing(0)
 
         dist   = self._results.get('stats', {}).get('score_distribution', {})
         labels = [str(i) for i in range(1, 8)]
@@ -464,7 +540,7 @@ class ResultWindow(QMainWindow):
         colors = ['#10b981', '#10b981', '#f59e0b', '#f59e0b',
                   '#ef4444', '#ef4444', '#7c2d12']
 
-        self._bar_fig, self._bar_ax = plt.subplots(figsize=(5, 2.6))
+        self._bar_fig, self._bar_ax = plt.subplots(figsize=(5, 3.0))
         self._bar_fig.patch.set_facecolor('#ffffff')
         self._bar_ax.set_facecolor('#ffffff')
         self._bar_ax.bar(labels, values, color=colors, width=0.6, edgecolor='none')
@@ -474,13 +550,55 @@ class ResultWindow(QMainWindow):
             spine.set_visible(False)
         self._bar_ax.yaxis.grid(True, linestyle='--', alpha=0.4, color='#e2e8f0')
         self._bar_ax.set_axisbelow(True)
-        plt.tight_layout()
+        # Keep extra margins so translated axis labels are not clipped.
+        self._bar_fig.subplots_adjust(left=0.11, right=0.98, top=0.96, bottom=0.18)
 
         self._bar_canvas = FigureCanvas(self._bar_fig)
-        self._bar_canvas.setFixedHeight(200)
+        self._bar_canvas.setFixedHeight(300)
         col.addWidget(self._bar_canvas)
+        return w
 
-        return card
+    def _build_pie_tab(self) -> QWidget:
+        w = QWidget()
+        w.setStyleSheet('background: transparent;')
+        col = QVBoxLayout(w)
+        col.setContentsMargins(0, 8, 0, 0)
+        col.setSpacing(0)
+
+        dist   = self._results.get('stats', {}).get('score_distribution', {})
+        pie_data = {i: dist.get(str(i), 0) for i in range(1, 8)}
+        pie_data = {k: v for k, v in pie_data.items() if v > 0}
+
+        self._pie_fig, self._pie_ax = plt.subplots(figsize=(5, 3.2))
+        self._pie_fig.patch.set_facecolor('#ffffff')
+        self._pie_ax.set_facecolor('#ffffff')
+
+        if pie_data:
+            _score_bar_colors = {
+                1: '#10b981', 2: '#10b981', 3: '#f59e0b', 4: '#f59e0b',
+                5: '#ef4444', 6: '#ef4444', 7: '#7c2d12',
+            }
+            pie_labels = [str(k) for k in pie_data]
+            pie_values = list(pie_data.values())
+            pie_colors = [_score_bar_colors[k] for k in pie_data]
+            wedges, texts, autotexts = self._pie_ax.pie(
+                pie_values, labels=pie_labels, colors=pie_colors,
+                autopct='%1.1f%%', startangle=90,
+                textprops={'fontsize': 9, 'color': '#374151'},
+                wedgeprops={'edgecolor': 'white', 'linewidth': 1.5},
+            )
+            for at in autotexts:
+                at.set_fontsize(8)
+        else:
+            self._pie_ax.text(0.5, 0.5, '—', ha='center', va='center',
+                              fontsize=20, color='#94a3b8',
+                              transform=self._pie_ax.transAxes)
+        self._pie_fig.subplots_adjust(left=0.06, right=0.96, top=0.96, bottom=0.10)
+
+        self._pie_canvas = FigureCanvas(self._pie_fig)
+        self._pie_canvas.setFixedHeight(300)
+        col.addWidget(self._pie_canvas)
+        return w
 
     # ── Language ──────────────────────────────────────────────────────────────
     def on_language_changed(self, _lang_code):
@@ -517,9 +635,10 @@ class ResultWindow(QMainWindow):
         for lbl, (_val, key, _tc, _bg) in zip(self._stat_label_widgets, self._stat_items):
             lbl.setText(t(key))
 
-        # Chart section titles
-        self._chart_title_lbl.setText(t('result_chart_title'))
-        self._bar_title_lbl.setText(t('result_bar_title'))
+        # Chart tab labels
+        self._chart_tabs.setTabText(0, t('result_tab_trend'))
+        self._chart_tabs.setTabText(1, t('result_tab_bar'))
+        self._chart_tabs.setTabText(2, t('result_tab_pie'))
 
         # Update matplotlib axis labels
         self._line_ax.set_xlabel(t('result_chart_x'), fontsize=9, color='#64748b')
@@ -560,9 +679,25 @@ class ResultWindow(QMainWindow):
             frame_rgb = _frame_rgb_from_video(self._cap, rec['frame'])
 
         if frame_rgb is not None:
-            lm2d = rec.get('landmarks_2d')
-            if self._show_skeleton and lm2d:
-                frame_rgb = _draw_skeleton(frame_rgb, lm2d)
+            if self._show_skeleton:
+                native = rec.get('native_draw_data')
+
+                if isinstance(native, dict):
+                    backend = str(native.get('backend', self._backend_mode)).upper()
+                    if backend == 'RTMW3D':
+                        keypoints_2d_norm = native.get('keypoints_2d_norm') or []
+                        scores = native.get('scores') or []
+                        if keypoints_2d_norm and scores:
+                            frame_rgb = _draw_rtmw_skeleton(
+                                frame_rgb,
+                                keypoints_2d_norm,
+                                scores,
+                                kpt_threshold=0.3,
+                            )
+                    elif backend == 'MEDIAPIPE':
+                        lms = native.get('landmarks_2d') or []
+                        if lms:
+                            frame_rgb = _draw_mediapipe_skeleton(frame_rgb, lms)
             score = rec.get('best_score')
             txt   = f"RULA: {score if score is not None else 'NULL'}"
             cv2.putText(frame_rgb, txt, (10, 32),
@@ -588,6 +723,11 @@ class ResultWindow(QMainWindow):
         )
         self._ts_lbl.setText(t('result_time_label').format(ts))
         self._update_score_badge(score)
+
+        # Sync slider without re-triggering _on_slider_changed
+        self._frame_slider.blockSignals(True)
+        self._frame_slider.setValue(idx)
+        self._frame_slider.blockSignals(False)
 
         self._vline.set_xdata([ts, ts])
         try:
@@ -646,6 +786,11 @@ class ResultWindow(QMainWindow):
             return
         self._show_frame(self._current_idx + 1)
 
+    def _on_slider_changed(self, value: int):
+        self._play_timer.stop()
+        self._play_btn.setText(t('result_play_btn'))
+        self._show_frame(value)
+
     def _on_skeleton_toggle(self, checked: bool):
         self._show_skeleton = checked
         self._show_frame(self._current_idx)
@@ -696,5 +841,6 @@ class ResultWindow(QMainWindow):
         self._close_video()
         plt.close(self._line_fig)
         plt.close(self._bar_fig)
+        plt.close(self._pie_fig)
         self.back_requested.emit()
         super().closeEvent(event)

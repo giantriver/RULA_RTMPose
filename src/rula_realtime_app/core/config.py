@@ -28,6 +28,32 @@ KINECT_BODY_TRACKING_PATH = r"C:\Program Files\Azure Kinect Body Tracking SDK\to
 KINECT_RESOLUTION = "1080P"  # 可選: 720P, 1080P, 1440P, 1536P, 2160P, 3072P
 KINECT_DEPTH_MODE = "WFOV_2x2BINNED"  # 可選: NFOV_2x2BINNED, NFOV_UNBINNED, WFOV_2x2BINNED, WFOV_UNBINNED
 
+
+def resolve_kinect_color_resolution(pykinect_module, resolution_name=None):
+    """依設定字串回傳 pykinect 的 color_resolution enum。"""
+    mapping = {
+        "720P": pykinect_module.K4A_COLOR_RESOLUTION_720P,
+        "1080P": pykinect_module.K4A_COLOR_RESOLUTION_1080P,
+        "1440P": pykinect_module.K4A_COLOR_RESOLUTION_1440P,
+        "1536P": pykinect_module.K4A_COLOR_RESOLUTION_1536P,
+        "2160P": pykinect_module.K4A_COLOR_RESOLUTION_2160P,
+        "3072P": pykinect_module.K4A_COLOR_RESOLUTION_3072P,
+    }
+    key = (resolution_name or KINECT_RESOLUTION)
+    return mapping.get(key, pykinect_module.K4A_COLOR_RESOLUTION_1080P)
+
+
+def resolve_kinect_depth_mode(pykinect_module, depth_mode_name=None):
+    """依設定字串回傳 pykinect 的 depth_mode enum。"""
+    mapping = {
+        "NFOV_2x2BINNED": pykinect_module.K4A_DEPTH_MODE_NFOV_2X2BINNED,
+        "NFOV_UNBINNED": pykinect_module.K4A_DEPTH_MODE_NFOV_UNBINNED,
+        "WFOV_2x2BINNED": pykinect_module.K4A_DEPTH_MODE_WFOV_2X2BINNED,
+        "WFOV_UNBINNED": pykinect_module.K4A_DEPTH_MODE_WFOV_UNBINNED,
+    }
+    key = (depth_mode_name or KINECT_DEPTH_MODE)
+    return mapping.get(key, pykinect_module.K4A_DEPTH_MODE_WFOV_2X2BINNED)
+
 def load_kinect_libraries():
     """載入 Azure Kinect SDK 和 Body Tracking SDK DLLs"""
     if os.path.exists(KINECT_SDK_PATH):

@@ -359,6 +359,64 @@ class PoseDetector:
         return [[lm.x, lm.y, lm.visibility]
                 for lm in self.results.pose_landmarks.landmark]
 
+    def get_native_draw_data_2d(self):
+        """
+        取得可供「原生繪圖器」重現骨架的 2D 資料（含完整關節）。
+
+        Returns:
+            dict | None:
+                - RTMW3D:
+                    {
+                        'backend': 'RTMW3D',
+                        'keypoints_2d_norm': [[x_norm, y_norm], ...],
+                        'scores': [conf, ...]
+                    }
+                - MEDIAPIPE:
+                    {
+                        'backend': 'MEDIAPIPE',
+                        'landmarks_2d': [[x_norm, y_norm, visibility], ...]
+                    }
+        """
+        if self.backend_mode == 'RTMW3D':
+            if self.last_keypoints_2d is None or self.last_scores is None:
+                return None
+
+            w, h = getattr(self, '_last_image_wh', (1, 1))
+            if w <= 0 or h <= 0:
+                return None
+
+            selected_2d = np.asarray(self.last_keypoints_2d[0])
+            selected_sc = np.asarray(self.last_scores[0]).reshape(-1)
+
+            kpts_norm = []
+            for i in range(selected_2d.shape[0]):
+                x_px, y_px = float(selected_2d[i, 0]), float(selected_2d[i, 1])
+                x_norm = x_px / w
+                y_norm = y_px / h
+                kpts_norm.append([x_norm, y_norm])
+
+            scores = []
+            for i in range(selected_sc.shape[0]):
+                conf = max(0.0, min(1.0, float(selected_sc[i])))
+                scores.append(conf)
+
+            return {
+                'backend': 'RTMW3D',
+                'keypoints_2d_norm': kpts_norm,
+                'scores': scores,
+            }
+
+        if self.results is None or self.results.pose_landmarks is None:
+            return None
+
+        return {
+            'backend': 'MEDIAPIPE',
+            'landmarks_2d': [
+                [float(lm.x), float(lm.y), float(lm.visibility)]
+                for lm in self.results.pose_landmarks.landmark
+            ],
+        }
+
     def get_landmarks_array(self):
         """取得關鍵點陣列（用於 RULA 計算）。"""
         if self.backend_mode == 'RTMW3D':

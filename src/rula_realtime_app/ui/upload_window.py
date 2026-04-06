@@ -1,7 +1,8 @@
 """
-上傳影片分析視窗
-使用者填寫調查資訊、選擇影片後送出分析；
-分析完成後發出 analysis_done 信號，由 AppController 開啟獨立的 ResultWindow。
+影片上傳分析視窗模組。
+
+提供離線分析入口，負責蒐集調查資訊與分析參數，啟動背景執行緒處理影片，
+並在完成後發送 analysis_done 給控制器開啟結果視窗。
 """
 
 import os
@@ -29,7 +30,7 @@ class UploadWindow(QMainWindow):
 
     Signals:
         back_requested:     使用者按「回到主頁」
-        analysis_done(dict): 分析完成，附帶完整 results dict（含 landmarks_2d）
+        analysis_done(dict): 分析完成，附帶完整 results dict（含 native_draw_data）
     """
 
     back_requested  = pyqtSignal()

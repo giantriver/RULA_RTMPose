@@ -265,11 +265,13 @@ while cap.isOpened():
         break
         
     start_time = time.time()
+    can_draw_skeleton = False
 
     # 推理（RTMPose3d 正常回傳 4 個值；tracking 邊界情況可能只回傳 2 個值）
     result = wholebody3d(frame)
     if isinstance(result, tuple) and len(result) == 4:
         keypoints, scores, _, keypoints_2d = result
+        can_draw_skeleton = True
     elif isinstance(result, tuple) and len(result) == 2:
         keypoints, scores = result
         # rtmlib 0.0.15 的 __call__ 裡，偵測例外路徑會直接 return [], []。
@@ -288,13 +290,17 @@ while cap.isOpened():
                 f" det_fail={two_value_reason_counts['detection_failed']},"
                 f" track_fail={two_value_reason_counts['tracking_reorder_failed']}"
             )
-        # Some tracking branches return only keypoints/scores; use XY from keypoints as 2D fallback.
-        keypoints_2d = keypoints[..., :2] if hasattr(keypoints, 'ndim') and keypoints.ndim >= 3 and keypoints.shape[-1] >= 2 else []
+        # 2-value 路徑不再使用 keypoints[..., :2] 當 fallback，避免用不同座標系畫錯骨架。
+        keypoints_2d = []
     else:
         raise RuntimeError(f'PoseTracker 回傳格式異常: {type(result)} / len={len(result) if isinstance(result, tuple) else "N/A"}')
 
-    keypoints_2d, scores, target_bbox = select_single_target(
-        keypoints_2d, scores, target_bbox)
+    if can_draw_skeleton:
+        keypoints_2d, scores, target_bbox = select_single_target(
+            keypoints_2d, scores, target_bbox)
+    else:
+        # 不畫骨架時維持既有 target_bbox，避免錯誤更新造成下一幀追蹤漂移。
+        keypoints_2d = []
 
     # 計算並顯示 FPS
     end_time = time.time()
