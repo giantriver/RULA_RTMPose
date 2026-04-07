@@ -779,6 +779,70 @@ TRANSLATIONS = {
         'en': 'MediaPipe (Fast)',
         'zh_TW': 'MediaPipe（快速）'
     },
+    'upload_wrist_twist_label': {
+        'en': 'Wrist Twist',
+        'zh_TW': '手腕扭轉'
+    },
+    'upload_wrist_twist_option_neutral': {
+        'en': 'Neutral',
+        'zh_TW': '無扭轉'
+    },
+    'upload_wrist_twist_option_twisted': {
+        'en': 'Twisted',
+        'zh_TW': '有扭轉'
+    },
+    'upload_legs_label': {
+        'en': 'Legs',
+        'zh_TW': '腿部姿勢'
+    },
+    'upload_legs_option_supported': {
+        'en': 'Supported / stable',
+        'zh_TW': '支撐穩定'
+    },
+    'upload_legs_option_unstable': {
+        'en': 'Unstable / awkward',
+        'zh_TW': '不穩定或不自然'
+    },
+    'upload_muscle_use_a_label': {
+        'en': 'Muscle Use A',
+        'zh_TW': '肌肉使用 A'
+    },
+    'upload_muscle_use_b_label': {
+        'en': 'Muscle Use B',
+        'zh_TW': '肌肉使用 B'
+    },
+    'upload_muscle_use_option_no': {
+        'en': 'No',
+        'zh_TW': '否'
+    },
+    'upload_muscle_use_option_yes': {
+        'en': 'Yes',
+        'zh_TW': '是'
+    },
+    'upload_force_load_a_label': {
+        'en': 'Force/Load A',
+        'zh_TW': '負荷 A'
+    },
+    'upload_force_load_b_label': {
+        'en': 'Force/Load B',
+        'zh_TW': '負荷 B'
+    },
+    'upload_load_option_0': {
+        'en': '< 4.4 lb (intermittent)',
+        'zh_TW': '載重 < 4.4 磅（間歇）'
+    },
+    'upload_load_option_1': {
+        'en': '4.4-22 lb (intermittent)',
+        'zh_TW': '載重 4.4-22 磅（間歇）'
+    },
+    'upload_load_option_2': {
+        'en': '4.4-22 lb (static/repetitive)',
+        'zh_TW': '載重 4.4-22 磅（靜態或重複）'
+    },
+    'upload_load_option_3': {
+        'en': '> 22 lb or repetitive/impact',
+        'zh_TW': '載重 > 22 磅 或 重複/衝擊'
+    },
     'upload_analyze_btn': {
         'en': '▶  Start Analysis',
         'zh_TW': '▶  開始分析'

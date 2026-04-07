@@ -183,23 +183,71 @@ class UploadWindow(QMainWindow):
 
         # Analysis settings
         self._settings_group = QGroupBox()
-        sl = QHBoxLayout(self._settings_group)
-        sl.setSpacing(16)
+        sl = QGridLayout(self._settings_group)
+        sl.setSpacing(12)
+        sl.setColumnStretch(1, 1)
+        sl.setColumnStretch(3, 1)
 
         self._interval_label = QLabel()
-        sl.addWidget(self._interval_label)
+        sl.addWidget(self._interval_label, 0, 0)
         self._interval_spin = QSpinBox()
         self._interval_spin.setRange(1, 60)
         self._interval_spin.setValue(10)
-        sl.addWidget(self._interval_spin)
+        sl.addWidget(self._interval_spin, 0, 1)
 
         self._backend_label = QLabel()
-        sl.addWidget(self._backend_label)
+        sl.addWidget(self._backend_label, 0, 2)
         self._backend_combo = QComboBox()
         self._backend_combo.addItem('', 'RTMW3D')
         self._backend_combo.addItem('', 'MEDIAPIPE')
-        sl.addWidget(self._backend_combo)
-        sl.addStretch()
+        sl.addWidget(self._backend_combo, 0, 3)
+
+        self._wrist_twist_label = QLabel()
+        sl.addWidget(self._wrist_twist_label, 1, 0)
+        self._wrist_twist_combo = QComboBox()
+        self._wrist_twist_combo.addItem('', 1)
+        self._wrist_twist_combo.addItem('', 2)
+        sl.addWidget(self._wrist_twist_combo, 1, 1)
+
+        self._legs_label = QLabel()
+        sl.addWidget(self._legs_label, 1, 2)
+        self._legs_combo = QComboBox()
+        self._legs_combo.addItem('', 1)
+        self._legs_combo.addItem('', 2)
+        self._legs_combo.setCurrentIndex(1)
+        sl.addWidget(self._legs_combo, 1, 3)
+
+        self._muscle_use_a_label = QLabel()
+        sl.addWidget(self._muscle_use_a_label, 2, 0)
+        self._muscle_use_a_combo = QComboBox()
+        self._muscle_use_a_combo.addItem('', 0)
+        self._muscle_use_a_combo.addItem('', 1)
+        sl.addWidget(self._muscle_use_a_combo, 2, 1)
+
+        self._muscle_use_b_label = QLabel()
+        sl.addWidget(self._muscle_use_b_label, 2, 2)
+        self._muscle_use_b_combo = QComboBox()
+        self._muscle_use_b_combo.addItem('', 0)
+        self._muscle_use_b_combo.addItem('', 1)
+        sl.addWidget(self._muscle_use_b_combo, 2, 3)
+
+        self._force_load_a_label = QLabel()
+        sl.addWidget(self._force_load_a_label, 3, 0)
+        self._force_load_a_combo = QComboBox()
+        self._force_load_a_combo.addItem('', 0)
+        self._force_load_a_combo.addItem('', 1)
+        self._force_load_a_combo.addItem('', 2)
+        self._force_load_a_combo.addItem('', 3)
+        sl.addWidget(self._force_load_a_combo, 3, 1)
+
+        self._force_load_b_label = QLabel()
+        sl.addWidget(self._force_load_b_label, 3, 2)
+        self._force_load_b_combo = QComboBox()
+        self._force_load_b_combo.addItem('', 0)
+        self._force_load_b_combo.addItem('', 1)
+        self._force_load_b_combo.addItem('', 2)
+        self._force_load_b_combo.addItem('', 3)
+        sl.addWidget(self._force_load_b_combo, 3, 3)
 
         col.addWidget(self._settings_group)
 
@@ -290,6 +338,33 @@ class UploadWindow(QMainWindow):
         self._backend_label.setText(t('upload_backend_label'))
         self._backend_combo.setItemText(0, t('upload_backend_rtmw3d'))
         self._backend_combo.setItemText(1, t('upload_backend_mediapipe'))
+        self._wrist_twist_label.setText(t('upload_wrist_twist_label'))
+        self._wrist_twist_combo.setItemText(0, t('upload_wrist_twist_option_neutral'))
+        self._wrist_twist_combo.setItemText(1, t('upload_wrist_twist_option_twisted'))
+
+        self._legs_label.setText(t('upload_legs_label'))
+        self._legs_combo.setItemText(0, t('upload_legs_option_supported'))
+        self._legs_combo.setItemText(1, t('upload_legs_option_unstable'))
+
+        self._muscle_use_a_label.setText(t('upload_muscle_use_a_label'))
+        self._muscle_use_a_combo.setItemText(0, t('upload_muscle_use_option_no'))
+        self._muscle_use_a_combo.setItemText(1, t('upload_muscle_use_option_yes'))
+
+        self._muscle_use_b_label.setText(t('upload_muscle_use_b_label'))
+        self._muscle_use_b_combo.setItemText(0, t('upload_muscle_use_option_no'))
+        self._muscle_use_b_combo.setItemText(1, t('upload_muscle_use_option_yes'))
+
+        self._force_load_a_label.setText(t('upload_force_load_a_label'))
+        self._force_load_a_combo.setItemText(0, t('upload_load_option_0'))
+        self._force_load_a_combo.setItemText(1, t('upload_load_option_1'))
+        self._force_load_a_combo.setItemText(2, t('upload_load_option_2'))
+        self._force_load_a_combo.setItemText(3, t('upload_load_option_3'))
+
+        self._force_load_b_label.setText(t('upload_force_load_b_label'))
+        self._force_load_b_combo.setItemText(0, t('upload_load_option_0'))
+        self._force_load_b_combo.setItemText(1, t('upload_load_option_1'))
+        self._force_load_b_combo.setItemText(2, t('upload_load_option_2'))
+        self._force_load_b_combo.setItemText(3, t('upload_load_option_3'))
 
         self._analyze_btn.setText(t('upload_analyze_btn'))
         self._cancel_btn.setText(t('upload_cancel_btn'))
@@ -319,6 +394,15 @@ class UploadWindow(QMainWindow):
             'task_name':    self._task_edit.text().strip(),
         }
 
+        rula_params = {
+            'wrist_twist': int(self._wrist_twist_combo.currentData() or 1),
+            'legs': int(self._legs_combo.currentData() or 1),
+            'muscle_use_a': int(self._muscle_use_a_combo.currentData() or 0),
+            'muscle_use_b': int(self._muscle_use_b_combo.currentData() or 0),
+            'force_load_a': int(self._force_load_a_combo.currentData() or 0),
+            'force_load_b': int(self._force_load_b_combo.currentData() or 0),
+        }
+
         self._analyze_btn.setEnabled(False)
         self._preview_lbl.setVisible(True)
         self._progress_card.setVisible(True)
@@ -331,6 +415,7 @@ class UploadWindow(QMainWindow):
             meta           = meta,
             frame_interval = self._interval_spin.value(),
             backend_mode   = self._backend_combo.currentData(),
+            rula_params    = rula_params,
         )
         self._processor.moveToThread(self._proc_thread)
 
