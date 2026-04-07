@@ -33,7 +33,7 @@ class AppController:
     """
 
     def __init__(self):
-        self._launcher : LauncherWindow | None = None
+        self._launcher : LauncherWindow | None = None # type annotation
         self._realtime : MainWindow     | None = None
         self._upload   : UploadWindow   | None = None
         self._history  : HistoryWindow  | None = None
