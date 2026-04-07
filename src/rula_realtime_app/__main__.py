@@ -6,7 +6,7 @@ RULA 評估系統 - 主程式
 import sys
 import os
 import argparse
-
+# 強迫 Python 把 main.py 所在的那個資料夾當作搜尋的第一順位
 if __name__ == '__main__':
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -125,26 +125,26 @@ class AppController:
 # ──────────────────────────────────────────────────────────────────────────────
 def main():
     """主程式入口"""
-    parser = argparse.ArgumentParser(description='RULA 評估系統')
+    parser = argparse.ArgumentParser(description='RULA 評估系統') # python main.py -h
     parser.add_argument(
         '-d', '--display-mode',
         type=str, choices=['RULA', 'COORDINATES'], default=config.DISPLAY_MODE,
         help='即時模式顯示方式: RULA | COORDINATES'
     )
     parser.add_argument(
-        '-c', '--camera-mode',
-        type=str, choices=['WEBCAM', 'KINECT', 'KINECT_RGB', 'RTMW3D'],
-        default=config.CAMERA_MODE,
-        help='即時模式相機來源'
+        '-p', '--pose-backend',
+        type=str, choices=['MEDIAPIPE', 'RTMW3D'],
+        default=('RTMW3D' if config.POSE_BACKEND == 'RTMW3D' else 'MEDIAPIPE'),
+        help='即時模式姿勢辨識後端'
     )
     parser.add_argument(
         '--realtime', action='store_true',
         help='直接進入即時分析（略過啟動選擇頁）'
     )
-    args = parser.parse_args()
+    args = parser.parse_args() # 把你在 terminal 打的參數讀進來並轉成 Python 變數
 
     config.DISPLAY_MODE = args.display_mode
-    config.CAMERA_MODE  = args.camera_mode
+    config.POSE_BACKEND = args.pose_backend
 
     app = QApplication(sys.argv)
     app.setStyle('Fusion')

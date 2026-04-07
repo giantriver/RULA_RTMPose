@@ -2,13 +2,13 @@
 
 RULA_RTMPose is a desktop application for ergonomic risk assessment using computer vision.  
 It detects human body keypoints with RTMPose and computes **RULA (Rapid Upper Limb Assessment)** scores in real time.  
-The tool helps users quickly identify posture risk levels from a webcam, Kinect source, or uploaded video.
+The tool helps users quickly identify posture risk levels from uploaded video or live RGB input.
 
 ## What It Does
 
 - Real-time posture analysis with live RULA scoring
 - Offline analysis for uploaded videos
-- Multiple input modes: webcam, Kinect, and RTM 3D workflow
+- Multiple pose backends: MediaPipe and RTMW3D
 - Visual result windows with history recording for review
 
 ## Tech Stack
@@ -25,6 +25,12 @@ pip install -e .
 rula
 ```
 
+If Windows security policy blocks the generated launcher in `.venv/Scripts`, use:
+
+```bash
+python -m rula_realtime_app
+```
+
 Run directly in real-time mode:
 
 ```bash
@@ -33,7 +39,7 @@ rula --realtime
 
 Optional arguments:
 
-- `--camera-mode WEBCAM|KINECT|KINECT_RGB|RTMW3D`
+- `--pose-backend MEDIAPIPE|RTMW3D`
 - `--display-mode RULA|COORDINATES`
 
 ## Why This Project

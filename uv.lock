@@ -857,19 +857,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pykinect-azure"
-version = "0.0.4"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-    { name = "opencv-python" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ee/40/402245a9d44016975a5109e83dfab73feee8919090130887c9f1c63eb87b/pykinect_azure-0.0.4.tar.gz", hash = "sha256:15f72bfd76f63024247d22199389e96dbc8b6f5c7ae4d0672b6628969189f57a", size = 29906, upload-time = "2024-06-22T06:34:42.693Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bd/d4/171ae7c21f6adc061132a11bb4cba8ebd1c8a2654ded80db67b4f529c064/pykinect_azure-0.0.4-py3-none-any.whl", hash = "sha256:a701e5daf2b291c45921838b88a7b01ddc3128eb6793faf795e7ad39a4aa7785", size = 35966, upload-time = "2024-06-22T06:34:40.708Z" },
-]
-
-[[package]]
 name = "pyparsing"
 version = "3.3.2"
 source = { registry = "https://pypi.org/simple" }
@@ -978,11 +965,6 @@ dependencies = [
     { name = "rtmlib" },
 ]
 
-[package.optional-dependencies]
-kinect = [
-    { name = "pykinect-azure" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "matplotlib", specifier = ">=3.10.7" },
@@ -990,11 +972,9 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.4.4" },
     { name = "onnxruntime-gpu", specifier = ">=1.24.4" },
     { name = "opencv-python", specifier = ">=4.13.0.92" },
-    { name = "pykinect-azure", marker = "extra == 'kinect'" },
     { name = "pyqt6", specifier = ">=6.9.1" },
     { name = "rtmlib", specifier = ">=0.0.15" },
 ]
-provides-extras = ["kinect"]
 
 [[package]]
 name = "scipy"

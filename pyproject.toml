@@ -23,8 +23,3 @@ dependencies = [
 
 [project.scripts]
 rula = "rula_realtime_app.__main__:main"
-
-[project.optional-dependencies]
-kinect = [
-    "pykinect-azure",
-]

@@ -9,17 +9,10 @@ from .config import (
     MEDIAPIPE_CONFIG, 
     RTMW3D_CONFIG,
     RULA_CONFIG, 
-    CAMERA_MODE, 
+    POSE_BACKEND,
     WEBCAM_INDEX,
-    KINECT_TO_MEDIAPIPE, 
     RTMW_TO_MEDIAPIPE,
     convert_indexed_keypoints_to_pose33,
-    K4ABT,
-    load_kinect_libraries,
-    KINECT_SDK_PATH,
-    KINECT_BODY_TRACKING_PATH,
-    KINECT_RESOLUTION,
-    KINECT_DEPTH_MODE
 )
 
 __all__ = [
@@ -31,15 +24,8 @@ __all__ = [
     'MEDIAPIPE_CONFIG',
     'RTMW3D_CONFIG',
     'RULA_CONFIG',
-    'CAMERA_MODE',
+    'POSE_BACKEND',
     'WEBCAM_INDEX',
-    'KINECT_TO_MEDIAPIPE',
     'RTMW_TO_MEDIAPIPE',
-    'convert_indexed_keypoints_to_pose33',
-    'K4ABT',
-    'load_kinect_libraries',
-    'KINECT_SDK_PATH',
-    'KINECT_BODY_TRACKING_PATH',
-    'KINECT_RESOLUTION',
-    'KINECT_DEPTH_MODE'
+    'convert_indexed_keypoints_to_pose33'
 ]

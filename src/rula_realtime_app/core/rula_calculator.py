@@ -254,7 +254,7 @@ def rula_score_side(pose, side: str, previous_scores=None):
     trunk_indices = [L_SHOULDER, R_SHOULDER, L_HIP, R_HIP]
     if check_confidence(pose, trunk_indices):
         t = SHO_C - HIP_C  # 軀幹向量（髖→肩，向上）
-        VERTICAL_UP = np.array([0, -1, 0])  # 垂直向上參考向量（Kinect/MediaPipe 坐標系）
+        VERTICAL_UP = np.array([0, -1, 0])  # 垂直向上參考向量（MediaPipe 坐標系）
         theta_trunk = safe_angle(t, VERTICAL_UP)  # 計算軀幹與垂直方向的夾角
         angle_data['trunk_angle'] = round(theta_trunk, 2)
 

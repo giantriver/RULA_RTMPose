@@ -61,8 +61,8 @@ TRANSLATIONS = {
         'zh_TW': 'RULA 即時評估系統'
     },
     'window_title_with_source': {
-        'en': 'RULA Real-time Assessment System - {}',
-        'zh_TW': 'RULA 即時評估系統 - {}'
+        'en': 'RULA Real-time Assessment System - Pose Backend: {}',
+        'zh_TW': 'RULA 即時評估系統 - 姿勢辨識後端：{}'
     },
     
     # 按钮文本
@@ -185,10 +185,6 @@ TRANSLATIONS = {
     'msg_snapshot_failed': {
         'en': 'Failed to save snapshot',
         'zh_TW': '保存失敗'
-    },
-    'msg_kinect_connection_failed': {
-        'en': 'Azure Kinect connection failed',
-        'zh_TW': 'Azure Kinect 連接失敗'
     },
     'msg_generic_error': {
         'en': 'An error occurred',
@@ -318,8 +314,8 @@ TRANSLATIONS = {
         'zh_TW': '姿勢辨識後端：'
     },
     'config_pose_backend_desc': {
-        'en': 'Switch real-time pose estimation backend (requires webcam mode).',
-        'zh_TW': '切換即時姿勢辨識後端（使用一般攝影機模式）。'
+        'en': 'Switch real-time pose estimation backend.',
+        'zh_TW': '切換即時姿勢辨識後端。'
     },
     'config_option_backend_mediapipe': {
         'en': 'MediaPipe',
@@ -639,17 +635,13 @@ TRANSLATIONS = {
     },
     
     # 源类型
-    'source_kinect': {
-        'en': 'Azure Kinect',
-        'zh_TW': 'Azure Kinect'
-    },
-    'source_webcam': {
-        'en': 'Webcam',
-        'zh_TW': '網路攝影機'
+    'source_mediapipe': {
+        'en': 'MediaPipe',
+        'zh_TW': 'MediaPipe'
     },
     'source_rtmw3d_webcam': {
-        'en': 'RTMW3D (Webcam)',
-        'zh_TW': 'RTMW3D（網路攝影機）'
+        'en': 'RTMW3D',
+        'zh_TW': 'RTMW3D'
     },
     'source_video': {
         'en': 'Video File',

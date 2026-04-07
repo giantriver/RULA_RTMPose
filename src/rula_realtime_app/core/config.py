@@ -2,69 +2,18 @@
 配置檔案 - 集中管理所有設定參數
 """
 
-import os
 import numpy as np
 
-# === 數據源選擇 ===
-# 相機模式：
-# - "WEBCAM": 一般網路攝影機 + MediaPipe
-# - "KINECT": Azure Kinect + Body Tracking
-# - "KINECT_RGB": Kinect RGB + MediaPipe
-# - "RTMW3D": 一般網路攝影機 + RTMW3D
-CAMERA_MODE = "RTMW3D"  # 可選: "WEBCAM", "KINECT", "KINECT_RGB", "RTMW3D"
+# === 姿勢辨識後端選擇 ===
+# - "MEDIAPIPE": MediaPipe
+# - "RTMW3D": RTMW3D
+POSE_BACKEND = "RTMW3D"  # 可選: "MEDIAPIPE", "RTMW3D"
 
 # 一般網路攝影機索引
 WEBCAM_INDEX = 0
 
 # === 顯示模式選擇 ===
 DISPLAY_MODE = "RULA"  # "RULA": 顯示RULA評估分數; "COORDINATES": 顯示關鍵點坐標
-
-# === Azure Kinect SDK 配置 ===
-# 根據你的安裝路徑修改以下配置
-KINECT_SDK_PATH = r"C:\Program Files\Azure Kinect SDK v1.4.1\sdk\windows-desktop\amd64\release\bin"
-KINECT_BODY_TRACKING_PATH = r"C:\Program Files\Azure Kinect Body Tracking SDK\tools"
-
-# Kinect 設備配置
-KINECT_RESOLUTION = "1080P"  # 可選: 720P, 1080P, 1440P, 1536P, 2160P, 3072P
-KINECT_DEPTH_MODE = "WFOV_2x2BINNED"  # 可選: NFOV_2x2BINNED, NFOV_UNBINNED, WFOV_2x2BINNED, WFOV_UNBINNED
-
-
-def resolve_kinect_color_resolution(pykinect_module, resolution_name=None):
-    """依設定字串回傳 pykinect 的 color_resolution enum。"""
-    mapping = {
-        "720P": pykinect_module.K4A_COLOR_RESOLUTION_720P,
-        "1080P": pykinect_module.K4A_COLOR_RESOLUTION_1080P,
-        "1440P": pykinect_module.K4A_COLOR_RESOLUTION_1440P,
-        "1536P": pykinect_module.K4A_COLOR_RESOLUTION_1536P,
-        "2160P": pykinect_module.K4A_COLOR_RESOLUTION_2160P,
-        "3072P": pykinect_module.K4A_COLOR_RESOLUTION_3072P,
-    }
-    key = (resolution_name or KINECT_RESOLUTION)
-    return mapping.get(key, pykinect_module.K4A_COLOR_RESOLUTION_1080P)
-
-
-def resolve_kinect_depth_mode(pykinect_module, depth_mode_name=None):
-    """依設定字串回傳 pykinect 的 depth_mode enum。"""
-    mapping = {
-        "NFOV_2x2BINNED": pykinect_module.K4A_DEPTH_MODE_NFOV_2X2BINNED,
-        "NFOV_UNBINNED": pykinect_module.K4A_DEPTH_MODE_NFOV_UNBINNED,
-        "WFOV_2x2BINNED": pykinect_module.K4A_DEPTH_MODE_WFOV_2X2BINNED,
-        "WFOV_UNBINNED": pykinect_module.K4A_DEPTH_MODE_WFOV_UNBINNED,
-    }
-    key = (depth_mode_name or KINECT_DEPTH_MODE)
-    return mapping.get(key, pykinect_module.K4A_DEPTH_MODE_WFOV_2X2BINNED)
-
-def load_kinect_libraries():
-    """載入 Azure Kinect SDK 和 Body Tracking SDK DLLs"""
-    if os.path.exists(KINECT_SDK_PATH):
-        os.add_dll_directory(KINECT_SDK_PATH)
-    else:
-        print(f"警告: Kinect SDK 路徑不存在: {KINECT_SDK_PATH}")
-    
-    if os.path.exists(KINECT_BODY_TRACKING_PATH):
-        os.add_dll_directory(KINECT_BODY_TRACKING_PATH)
-    else:
-        print(f"警告: Kinect Body Tracking SDK 路徑不存在: {KINECT_BODY_TRACKING_PATH}")
 
 # RULA 固定參數設定
 RULA_CONFIG = {
@@ -176,60 +125,3 @@ def convert_indexed_keypoints_to_pose33(keypoints_xyz, keypoint_scores, index_ma
 
     return pose
 
-# === Azure Kinect 關節映射 (新增) ===
-# Azure Kinect joint indices (K4ABT)
-K4ABT = {
-    "PELVIS": 0,
-    "SPINE_NAVAL": 1,
-    "SPINE_CHEST": 2,
-    "NECK": 3,
-    "CLAVICLE_LEFT": 4,
-    "SHOULDER_LEFT": 5,
-    "ELBOW_LEFT": 6,
-    "WRIST_LEFT": 7,
-    "HAND_LEFT": 8,
-    "HANDTIP_LEFT": 9,
-    "THUMB_LEFT": 10,
-    "CLAVICLE_RIGHT": 11,
-    "SHOULDER_RIGHT": 12,
-    "ELBOW_RIGHT": 13,
-    "WRIST_RIGHT": 14,
-    "HAND_RIGHT": 15,
-    "HANDTIP_RIGHT": 16,
-    "THUMB_RIGHT": 17,
-    "HIP_LEFT": 18,
-    "KNEE_LEFT": 19,
-    "ANKLE_LEFT": 20,
-    "FOOT_LEFT": 21,
-    "HIP_RIGHT": 22,
-    "KNEE_RIGHT": 23,
-    "ANKLE_RIGHT": 24,
-    "FOOT_RIGHT": 25,
-    "HEAD": 26,
-    "NOSE": 27,
-    "EYE_LEFT": 28,
-    "EAR_LEFT": 29,
-    "EYE_RIGHT": 30,
-    "EAR_RIGHT": 31,
-}
-
-# Map Azure Kinect joints into a MediaPipe-like pose array (33 entries, each [x, y, z, conf]).
-# Only the indices used by rula_calculator need to be populated; others stay zeros.
-KINECT_TO_MEDIAPIPE = {
-    0: K4ABT["NOSE"],          # NOSE
-    7: K4ABT["EAR_LEFT"],      # LEFT EAR
-    8: K4ABT["EAR_RIGHT"],     # RIGHT EAR
-    11: K4ABT["SHOULDER_LEFT"],
-    12: K4ABT["SHOULDER_RIGHT"],
-    13: K4ABT["ELBOW_LEFT"],
-    14: K4ABT["ELBOW_RIGHT"],
-    15: K4ABT["WRIST_LEFT"],
-    16: K4ABT["WRIST_RIGHT"],
-    # Use thumb as pinky proxy and handtip as index proxy to satisfy hand center calc.
-    17: K4ABT["HAND_LEFT"],   # LEFT WRIST (equivlalent mid point calculations later)
-    18: K4ABT["HAND_RIGHT"],  # RIGHT WRIST (equivalent mid point calc later)
-    19: K4ABT["HAND_LEFT"],   # LEFT WRIST (equivalent mid point calc later)
-    20: K4ABT["HAND_RIGHT"],  # RIGHT WRIST (equivalent mid point calc later)
-    23: K4ABT["HIP_LEFT"],
-    24: K4ABT["HIP_RIGHT"],
-}

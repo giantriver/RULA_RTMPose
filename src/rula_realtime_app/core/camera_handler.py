@@ -53,7 +53,7 @@ class CameraHandler(QThread):
                 self.error_occurred.emit("讀取影像失敗")
                 break
             
-            # 不翻轉影像，保持與 Kinect 模式一致的左右方向
+            # 不翻轉影像，保持原始左右方向
             # frame = cv2.flip(frame, 1)  # 已移除鏡像翻轉
             
             # 轉換顏色空間 BGR -> RGB

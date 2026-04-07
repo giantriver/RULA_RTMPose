@@ -28,22 +28,6 @@ from .dialogs import RULAConfigDialog
 from .language import language_manager, t
 
 
-# 嘗試導入所有可能的相機模組（動態判斷）
-try:
-    from ..core.kinect_handler import KinectHandler
-    KINECT_AVAILABLE = True
-except Exception as e:
-    print(f"警告: 無法載入 Kinect 模組: {e}")
-    KINECT_AVAILABLE = False
-
-try:
-    from ..core.kinect_rgb_handler import KinectRGBHandler
-    KINECT_RGB_AVAILABLE = True
-except Exception as e:
-    print(f"警告: 無法載入 Kinect RGB 模組: {e}")
-    KINECT_RGB_AVAILABLE = False
-
-
 class MainWindow(QMainWindow):
     """
     RULA 即時評估主視窗
@@ -58,33 +42,26 @@ class MainWindow(QMainWindow):
         self.lang = language_manager
         self.lang.add_observer(self.on_language_changed)
         
-        # 從 config 動態讀取相機模式
-        self.camera_mode = core_config.CAMERA_MODE
+        # 從 config 動態讀取姿勢辨識後端
+        self.pose_backend = core_config.POSE_BACKEND
         
         # 根據配置設定視窗標題
         self.source_type_key = {
-            "WEBCAM": "source_webcam",
-            "KINECT": "source_kinect",
-            "KINECT_RGB": "source_kinect",
+            "MEDIAPIPE": "source_mediapipe",
             "RTMW3D": "source_rtmw3d_webcam"
-        }.get(self.camera_mode, "source_webcam")
+        }.get(self.pose_backend, "source_mediapipe")
         
         self.update_window_title()
         self.setGeometry(100, 100, 1400, 700)  # 加寬視窗
         
         # 核心元件
         self.camera_handler = None
-        self.kinect_handler = None
-        self.kinect_rgb_handler = None
         self._frame_proc_worker = None
         self._frame_proc_thread = None
         self.is_detection_active = False
-        # KINECT: 不需要 PoseDetector（由 Kinect SDK 負責骨架）
         # RTMW3D: 延遲到 worker 執行緒才初始化（ONNX 模型載入很慢，不能阻塞主執行緒）
-        # MEDIAPIPE/WEBCAM: 直接初始化（速度快，~100ms）
-        if self.camera_mode == "KINECT":
-            self.pose_detector = None
-        elif self.camera_mode == "RTMW3D":
+        # MEDIAPIPE: 直接初始化（速度快，~100ms）
+        if self.pose_backend == "RTMW3D":
             self.pose_detector = None  # 由 FrameProcessorWorker 在背景執行緒建立
         else:
             self.pose_detector = PoseDetector(backend_mode='MEDIAPIPE')
@@ -313,29 +290,7 @@ class MainWindow(QMainWindow):
         
     def start_detection(self):
         """開始辨識"""
-        if self.camera_mode == "KINECT":
-            # 使用 Azure Kinect（含 Body Tracking）
-            if not KINECT_AVAILABLE:
-                self.on_error("Azure Kinect 不可用，請檢查 SDK 安裝")
-                return
-            
-            self.is_detection_active = True
-            self.kinect_handler = KinectHandler()
-            self.kinect_handler.frame_ready.connect(self.on_kinect_frame_ready)
-            self.kinect_handler.error_occurred.connect(self.on_error)
-            self.kinect_handler.start()
-        elif self.camera_mode == "KINECT_RGB":
-            # 使用 Kinect RGB 相機 + MediaPipe
-            if not KINECT_RGB_AVAILABLE:
-                self.on_error("Kinect RGB 不可用，請檢查 SDK 安裝")
-                return
-            
-            self.is_detection_active = True
-            self.kinect_rgb_handler = KinectRGBHandler()
-            self.kinect_rgb_handler.frame_ready.connect(self.on_frame_ready)
-            self.kinect_rgb_handler.error_occurred.connect(self.on_error)
-            self.kinect_rgb_handler.start()
-        elif self.camera_mode == "RTMW3D":
+        if self.pose_backend == "RTMW3D":
             # 使用一般攝像頭 + RTMW3D
             self.is_detection_active = True
             self.camera_handler = CameraHandler(camera_index=core_config.WEBCAM_INDEX)
@@ -347,7 +302,7 @@ class MainWindow(QMainWindow):
                 Qt.ConnectionType.DirectConnection,
             )
             self.camera_handler.start()
-        else:  # self.camera_mode == "WEBCAM"
+        else:  # self.pose_backend == "MEDIAPIPE"
             # 使用攝像頭 + MediaPipe
             self.is_detection_active = True
             self.camera_handler = CameraHandler(camera_index=core_config.WEBCAM_INDEX)
@@ -376,7 +331,7 @@ class MainWindow(QMainWindow):
         # RTMW3D 傳 backend_mode 字串，讓 worker 在自己的執行緒延遲初始化
         # 其他模式傳已建立好的 PoseDetector
         detector_arg = (
-            'RTMW3D' if self.camera_mode == 'RTMW3D' else self.pose_detector
+            'RTMW3D' if self.pose_backend == 'RTMW3D' else self.pose_detector
         )
 
         self._frame_proc_thread = QThread()
@@ -408,26 +363,6 @@ class MainWindow(QMainWindow):
                 pass
             self.camera_handler.stop()
             self.camera_handler = None
-        
-        # 停止 Kinect
-        if self.kinect_handler:
-            try:
-                self.kinect_handler.frame_ready.disconnect()
-                self.kinect_handler.error_occurred.disconnect()
-            except:
-                pass
-            self.kinect_handler.stop()
-            self.kinect_handler = None
-        
-        # 停止 Kinect RGB
-        if self.kinect_rgb_handler:
-            try:
-                self.kinect_rgb_handler.frame_ready.disconnect()
-                self.kinect_rgb_handler.error_occurred.disconnect()
-            except:
-                pass
-            self.kinect_rgb_handler.stop()
-            self.kinect_rgb_handler = None
         
         # 停止 frame processor worker
         if self._frame_proc_thread is not None:
@@ -478,7 +413,7 @@ class MainWindow(QMainWindow):
 
     def on_back_home_clicked(self):
         """返回主頁。"""
-        if self.camera_handler or self.kinect_handler or self.kinect_rgb_handler:
+        if self.camera_handler:
             self.stop_detection()
         self.back_requested.emit()
     
@@ -518,92 +453,16 @@ class MainWindow(QMainWindow):
 
         FrameRenderer.display_frame(self.video_label, display_frame)
     
-    def on_kinect_frame_ready(self, frame, pose):
-        """
-        處理 Kinect 影像幀和骨架數據
-        
-        Args:
-            frame: RGB 格式的影像 (numpy array，已繪製骨架)
-            pose: 骨架關鍵點列表 (MediaPipe 格式) 或 None
-        """
-        # 如果暫停，則不更新顯示
-        if not self.is_detection_active or self.is_paused:
-            return
-        
-        self.current_frame = frame
-        self.frame_counter += 1
-        
-        # 計算 FPS（反映完整的處理速度）
-        self.fps_counter += 1
-        if self.fps_counter >= 30:
-            current_time = cv2.getTickCount()
-            elapsed = (current_time - self.fps_timer) / cv2.getTickFrequency()
-            fps = self.fps_counter / elapsed
-            self.on_fps_updated(fps)
-            
-            self.fps_counter = 0
-            self.fps_timer = current_time
-        
-        # Kinect 已經在 frame 上繪製了骨架，直接使用
-        annotated = frame
-        
-        # 如果有骨架數據，進行 RULA 計算（檢查 pose 列表是否非空）
-        if pose:
-            # 根據顯示模式更新面板
-            if self.display_mode == "RULA":
-                # 只在特定幀才計算 RULA（降低計算負擔）
-                if self.frame_counter % self.rula_calc_every_n_frames == 0:
-                    rula_left, rula_right = angle_calc(pose, self.prev_left, self.prev_right)
-                    
-                    # 儲存為下一幀的參考
-                    self.prev_left = rula_left
-                    self.prev_right = rula_right
-                    
-                    # 更新顯示
-                    self.left_group.update_score_panel(rula_left)
-                    self.right_group.update_score_panel(rula_right)
-                    
-                    # 如果正在錄影，記錄分數
-                    if self.is_recording:
-                        self.record_rula_scores(rula_left, rula_right)
-            else:
-                # 坐標顯示模式 - 每幀更新
-                self.coordinates_group.update_coordinates(pose)
-        
-        # 如果正在錄影，寫入影像幀
-        if self.is_recording and self.video_writer is not None:
-            # 轉換為 BGR 格式（OpenCV VideoWriter 需要）
-            frame_bgr = cv2.cvtColor(annotated, cv2.COLOR_RGB2BGR)
-            self.video_writer.write(frame_bgr)
-            self.recording_frame_count += 1
-        
-        # 如果正在倒數，在畫面上繪製倒數數字
-        if self.countdown_active and self.countdown_value > 0:
-            annotated = self.draw_countdown_on_frame(annotated)
-        
-        # 如果正在錄影，在畫面上繪製錄影指示
-        if self.is_recording:
-            annotated = self.draw_recording_indicator(annotated)
-        
-        # 顯示影像
-        FrameRenderer.display_frame(self.video_label, annotated)
-    
     def on_error(self, error_msg):
         """處理錯誤"""
         # 在視窗上顯示錯誤
         self.video_label.setText(t('status_error').format(error_msg))
 
-        # 設置主要文本
-        if "Kinect" in error_msg or "連接" in error_msg or "connection" in error_msg.lower():
-            message_text = t('msg_kinect_connection_failed')
-        else:
-            message_text = t('msg_generic_error')
-
         # 設置詳細信息（不使用 DetailedText 避免出現細節按鈕）
         self._show_message_box(
             QMessageBox.Icon.Critical,
             t('msg_error'),
-            message_text,
+            t('msg_generic_error'),
             informative_text=error_msg,
             style=ERROR_MESSAGEBOX_STYLE,
         )
@@ -749,20 +608,18 @@ class MainWindow(QMainWindow):
 
     def get_pose_backend_mode(self):
         """取得目前即時分析使用的姿勢偵測後端。"""
-        return 'RTMW3D' if self.camera_mode == 'RTMW3D' else 'MEDIAPIPE'
+        return 'RTMW3D' if self.pose_backend == 'RTMW3D' else 'MEDIAPIPE'
 
     def apply_pose_backend_mode(self, backend_mode):
         """套用姿勢偵測後端，必要時即時重啟偵測流程。"""
         target_backend = (backend_mode or 'MEDIAPIPE').upper()
-        target_camera_mode = 'RTMW3D' if target_backend == 'RTMW3D' else 'WEBCAM'
+        target_pose_backend = 'RTMW3D' if target_backend == 'RTMW3D' else 'MEDIAPIPE'
 
-        if self.camera_mode == target_camera_mode:
+        if self.pose_backend == target_pose_backend:
             return
 
         is_detecting = any([
             self.camera_handler is not None,
-            self.kinect_handler is not None,
-            self.kinect_rgb_handler is not None,
         ])
 
         if is_detecting:
@@ -775,18 +632,16 @@ class MainWindow(QMainWindow):
                 pass
             self.pose_detector = None
 
-        self.camera_mode = target_camera_mode
-        core_config.CAMERA_MODE = target_camera_mode
+        self.pose_backend = target_pose_backend
+        core_config.POSE_BACKEND = target_pose_backend
 
         self.source_type_key = {
-            "WEBCAM": "source_webcam",
-            "KINECT": "source_kinect",
-            "KINECT_RGB": "source_kinect",
+            "MEDIAPIPE": "source_mediapipe",
             "RTMW3D": "source_rtmw3d_webcam"
-        }.get(self.camera_mode, "source_webcam")
+        }.get(self.pose_backend, "source_mediapipe")
         self.update_window_title()
 
-        if self.camera_mode != 'RTMW3D':
+        if self.pose_backend != 'RTMW3D':
             self.pose_detector = PoseDetector(backend_mode='MEDIAPIPE')
 
         if is_detecting:
@@ -1087,14 +942,6 @@ class MainWindow(QMainWindow):
         # 停止攝像頭
         if self.camera_handler:
             self.camera_handler.stop()
-        
-        # 停止 Kinect
-        if self.kinect_handler:
-            self.kinect_handler.stop()
-        
-        # 停止 Kinect RGB
-        if self.kinect_rgb_handler:
-            self.kinect_rgb_handler.stop()
         
         # 關閉 MediaPipe pose detector
         if self.pose_detector:
