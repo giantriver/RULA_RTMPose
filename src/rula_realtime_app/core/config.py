@@ -62,6 +62,8 @@ RTMW = {
     "RIGHT_ELBOW": 8,
     "LEFT_WRIST": 9,
     "RIGHT_WRIST": 10,
+    "LEFT_MIDDLE_FINGER1": 100,
+    "RIGHT_MIDDLE_FINGER1": 121,
     "LEFT_HIP": 11,
     "RIGHT_HIP": 12,
 }
@@ -78,10 +80,12 @@ RTMW_TO_MEDIAPIPE = {
     14: RTMW["RIGHT_ELBOW"],
     15: RTMW["LEFT_WRIST"],
     16: RTMW["RIGHT_WRIST"],
-    17: RTMW["LEFT_WRIST"],   # pinky 代理點
-    18: RTMW["RIGHT_WRIST"],  # pinky 代理點
-    19: RTMW["LEFT_WRIST"],   # index 代理點
-    20: RTMW["RIGHT_WRIST"],  # index 代理點
+    # 讓 RTMW3D 的手腕角度使用 wrist -> middle_finger1 方向。
+    # rula_calculator 的 HAND_C = (INDEX + PINKY) / 2，因此將兩者都映射到 middle_finger1。
+    17: RTMW["LEFT_MIDDLE_FINGER1"],
+    18: RTMW["RIGHT_MIDDLE_FINGER1"],
+    19: RTMW["LEFT_MIDDLE_FINGER1"],
+    20: RTMW["RIGHT_MIDDLE_FINGER1"],
     23: RTMW["LEFT_HIP"],
     24: RTMW["RIGHT_HIP"],
 }
