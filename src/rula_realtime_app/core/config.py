@@ -33,7 +33,7 @@ USE_PREVIOUS_FRAME_ON_LOW_CONFIDENCE = False  # 低置信度處理策略
 # MediaPipe 設定（即時辨識優化）
 MEDIAPIPE_CONFIG = {
     'static_image_mode': False,
-    'model_complexity': 0,      # 改為 0（最輕量模型，提升速度）
+    'model_complexity': 2,      # 改為 0（最輕量模型，提升速度）
     'smooth_landmarks': True,
     'enable_segmentation': False,
     'smooth_segmentation': False,  # 關閉分割功能

@@ -18,7 +18,7 @@ from datetime import datetime
 
 from ..core.camera_handler import CameraHandler
 from ..core.pose_detector import PoseDetector
-from ..core.frame_processor import FrameProcessorWorker
+from ..core.realtime_processor import RealtimeProcessorWorker
 from ..core import angle_calc
 from ..core import config as core_config
 
@@ -62,7 +62,7 @@ class MainWindow(QMainWindow):
         # RTMW3D: 延遲到 worker 執行緒才初始化（ONNX 模型載入很慢，不能阻塞主執行緒）
         # MEDIAPIPE: 直接初始化（速度快，~100ms）
         if self.pose_backend == "RTMW3D":
-            self.pose_detector = None  # 由 FrameProcessorWorker 在背景執行緒建立
+            self.pose_detector = None  # 由 RealtimeProcessorWorker 在背景執行緒建立
         else:
             self.pose_detector = PoseDetector(backend_mode='MEDIAPIPE')
         
@@ -327,7 +327,7 @@ class MainWindow(QMainWindow):
         self.record_button.setEnabled(True)
     
     def _start_frame_processor(self):
-        """建立 FrameProcessorWorker 並移到獨立執行緒。"""
+        """建立 RealtimeProcessorWorker 並移到獨立執行緒。"""
         # RTMW3D 傳 backend_mode 字串，讓 worker 在自己的執行緒延遲初始化
         # 其他模式傳已建立好的 PoseDetector
         detector_arg = (
@@ -335,7 +335,7 @@ class MainWindow(QMainWindow):
         )
 
         self._frame_proc_thread = QThread()
-        self._frame_proc_worker = FrameProcessorWorker(
+        self._frame_proc_worker = RealtimeProcessorWorker(
             detector_arg,
             self.display_mode,
             self.rula_calc_every_n_frames,
@@ -419,7 +419,7 @@ class MainWindow(QMainWindow):
     
     def on_frame_processed(self, annotated, rula_left, rula_right, landmarks):
         """
-        接收 FrameProcessorWorker 處理完的結果（只做 UI 更新，不做任何 ML 推論）。
+        接收 RealtimeProcessorWorker 處理完的結果（只做 UI 更新，不做任何 ML 推論）。
         此方法在主執行緒執行。
         """
         if not self.is_detection_active or self.is_paused:

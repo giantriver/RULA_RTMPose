@@ -1017,6 +1017,7 @@ TRANSLATIONS = {
     'result_stat_valid':    {'en': 'Valid Frames',   'zh_TW': '有效幀'},
     'result_stat_invalid':  {'en': 'Invalid Frames', 'zh_TW': '無效幀'},
     'result_stat_duration': {'en': 'Duration',       'zh_TW': '影片長度'},
+    'result_stat_analysis_duration': {'en': 'Analysis Time', 'zh_TW': '分析時長'},
     'result_stat_max':      {'en': 'Max Score',      'zh_TW': '最高分'},
     'result_stat_avg':      {'en': 'Avg Score',      'zh_TW': '平均分'},
     'result_chart_title': {

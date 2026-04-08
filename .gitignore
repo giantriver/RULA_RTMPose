@@ -212,3 +212,8 @@ rula_snapshots/
 
 # Recording videos, charts, and RULA score reports
 rula_records/
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd

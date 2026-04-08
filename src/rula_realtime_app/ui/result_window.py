@@ -421,8 +421,12 @@ class ResultWindow(QMainWindow):
         fps   = self._results.get('fps', 1)
         total = self._results.get('total_frames', 0)
         dur   = total / fps if fps else 0
+        analysis_dur = self._results.get('analysis_duration_seconds')
         valid = sum(1 for r in self._records if isinstance(r.get('best_score'), int))
         invalid = len(self._records) - valid
+        analysis_dur_text = '—'
+        if isinstance(analysis_dur, (int, float)):
+            analysis_dur_text = f'{analysis_dur:.1f} s'
 
         # Store value/label pairs so we can update label text on language change
         # Each entry: (value_str, key, text_color, bg_color)
@@ -431,6 +435,7 @@ class ResultWindow(QMainWindow):
             (str(valid),                           'result_stat_valid',    '#065f46', '#d1fae5'),
             (str(invalid),                         'result_stat_invalid',  '#991b1b', '#fee2e2'),
             (f'{dur:.1f} s',                       'result_stat_duration', '#6d28d9', '#ede9fe'),
+            (analysis_dur_text,                   'result_stat_analysis_duration', '#0f766e', '#ccfbf1'),
             (str(stats.get('max_score') or '—'),   'result_stat_max',      '#991b1b', '#fee2e2'),
             (f"{stats.get('avg_score') or '—'}",   'result_stat_avg',      '#92400e', '#fef3c7'),
         ]

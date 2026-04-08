@@ -6,6 +6,7 @@ import cv2
 import csv
 import json
 import os
+import time
 from datetime import datetime
 
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
@@ -73,6 +74,7 @@ class VideoFileProcessor(QObject):
 
     # ------------------------------------------------------------------
     def _process(self):
+        analysis_started_at = time.perf_counter()
         cap = cv2.VideoCapture(self.video_path)
         if not cap.isOpened():
             self.error_occurred.emit(f'無法開啟影片檔案：{self.video_path}')
@@ -192,7 +194,8 @@ class VideoFileProcessor(QObject):
                 return
 
             self.progress_updated.emit(97, '統計資料中...')
-            results = self._build_results(records, total_frames, fps)
+            analysis_duration_seconds = max(0.0, time.perf_counter() - analysis_started_at)
+            results = self._build_results(records, total_frames, fps, analysis_duration_seconds)
             self.progress_updated.emit(100, '分析完成！')
             self.analysis_complete.emit(results)
         finally:
@@ -201,7 +204,8 @@ class VideoFileProcessor(QObject):
             RULA_CONFIG.update(original_rula_config)
 
     # ------------------------------------------------------------------
-    def _build_results(self, records: list, total_frames: int, fps: float) -> dict:
+    def _build_results(self, records: list, total_frames: int, fps: float,
+                       analysis_duration_seconds: float = 0.0) -> dict:
         valid_scores = [r['best_score'] for r in records
                         if isinstance(r['best_score'], int)]
 
@@ -218,6 +222,7 @@ class VideoFileProcessor(QObject):
             'processed_frames': len(records),
             'fps':              fps,
             'frame_interval':   self.frame_interval,
+            'analysis_duration_seconds': round(max(0.0, float(analysis_duration_seconds)), 3),
             'backend_mode':     (self.backend_mode or 'MEDIAPIPE').upper(),
             'rula_params':      dict(self.rula_params),
             'records':          records,

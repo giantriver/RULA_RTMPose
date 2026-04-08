@@ -5,7 +5,7 @@ Architecture:
     CameraHandler (QThread)
         │ frame_ready (DirectConnection)
         ▼
-    FrameProcessorWorker._set_latest_frame()   ← just stores latest frame, no queue
+    RealtimeProcessorWorker.set_latest_frame()   ← just stores latest frame, no queue
         │ QTimer polling
         ▼
     _poll() → _do_process()                    ← runs on worker thread
@@ -28,7 +28,7 @@ from . import angle_calc
 from .pose_detector import PoseDetector
 
 
-class FrameProcessorWorker(QObject):
+class RealtimeProcessorWorker(QObject):
     """
     Worker that runs ML inference and RULA calculation on a background thread.
 
