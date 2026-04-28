@@ -1,12 +1,49 @@
 """
 RULA 計算核心模組
 負責角度計算和 RULA 評分
+參考 rula_realtime_app/core/rula_calculator.py 完整實作
 """
 
 import numpy as np
 from .rula_tables import TABLE_A_DATA, TABLE_B_DATA, TABLE_C_DATA
-from .utils import safe_angle, check_confidence
-from .config import RULA_CONFIG, TOLERANCE_ANGLE, USE_PREVIOUS_FRAME_ON_LOW_CONFIDENCE
+from .utils import safe_angle, safe_unit_vector, check_confidence
+
+# 從 video_config 導入配置參數
+def _get_rula_config():
+    """延遲獲取 RULA 配置"""
+    try:
+        from .video_config import RULA_CONFIG
+        return RULA_CONFIG
+    except ImportError:
+        return {
+            'wrist_twist': 1,
+            'legs': 1,
+            'muscle_use_a': 0,
+            'muscle_use_b': 0,
+            'force_load_a': 0,
+            'force_load_b': 0,
+        }
+
+def _get_tolerance_angle():
+    """延遲獲取容忍角度"""
+    try:
+        from .video_config import TOLERANCE_ANGLE
+        return TOLERANCE_ANGLE
+    except ImportError:
+        return 5.0
+
+def _get_use_previous_frame():
+    """延遲獲取是否使用前一幀"""
+    try:
+        from .video_config import USE_PREVIOUS_FRAME_ON_LOW_CONFIDENCE
+        return USE_PREVIOUS_FRAME_ON_LOW_CONFIDENCE
+    except ImportError:
+        return False
+
+# 模組級別變數（向後兼容）
+RULA_CONFIG = _get_rula_config()
+TOLERANCE_ANGLE = _get_tolerance_angle()
+USE_PREVIOUS_FRAME_ON_LOW_CONFIDENCE = _get_use_previous_frame()
 
 def rula_risk(point_score, wrist, trunk, upper_Shoulder, lower_Limb, neck,
               wrist_twist, legs, muscle_use_a, muscle_use_b, force_load_a, force_load_b):
@@ -173,72 +210,22 @@ def rula_score_side(pose, side: str, previous_scores=None):
     point_score['wrist'] = wrist_score
     point_score['wrist_adjustment'] = 0
 
-    # B-1: Neck（頸角）- 使用 pipeline.md 中的鼻子-耳朵方法
+    # B-1: Neck（頸角）
     head_indices = [L_EAR, R_EAR]
     if check_confidence(pose, head_indices + [L_SHOULDER, R_SHOULDER]):
         t = SHO_C - HIP_C  # 軀幹向量（髖→肩）
         n = HEAD_C - SHO_C  # 頸部向量（肩→頭）
 
         # 計算基本角度（0-180度）
-        theta_neck = safe_angle(t, n)
+        theta_neck = abs(safe_angle(t, n))
+        angle_data['neck_angle'] = round(theta_neck, 2)
 
-        # 判斷前後方向：使用鼻子與兩耳中心的Y軸差異（pipeline.md方法）
-        NOSE = 0  # MediaPipe 鼻子索引
-        neck_forward = True  # 預設為前屈
-
-        # 檢查鼻子和兩耳的置信度
-        if (len(pose) > NOSE and len(pose[NOSE]) > 3 and pose[NOSE][3] > 0.5 and  # 鼻子置信度
-            pose[L_EAR][3] > 0.5 and pose[R_EAR][3] > 0.5):  # 兩耳置信度
-
-            # 獲取關鍵點座標
-            nose_pos = np.array([pose[NOSE][0], pose[NOSE][1], pose[NOSE][2]])
-            l_ear_pos = np.array([pose[L_EAR][0], pose[L_EAR][1], pose[L_EAR][2]])
-            r_ear_pos = np.array([pose[R_EAR][0], pose[R_EAR][1], pose[R_EAR][2]])
-
-            # 計算兩耳中心點
-            ear_center = (l_ear_pos + r_ear_pos) / 2
-
-            # Y軸差異判斷（MediaPipe座標系：Y向下為正）
-            nose_ear_y_diff = nose_pos[1] - ear_center[1]
-
-            # 判斷邏輯：
-            # 前屈（低頭）：鼻子比耳朵低 → nose_ear_y_diff > 0 → 正角度
-            # 後仰（抬頭）：鼻子比耳朵高 → nose_ear_y_diff < 0 → 負角度
-            if nose_ear_y_diff < -0.01:  # 鼻子比耳朵高，後仰
-                neck_forward = False
-            elif nose_ear_y_diff > 0.01:  # 鼻子比耳朵低，前屈
-                neck_forward = True
-            else:  # 中性範圍，預設前屈
-                neck_forward = True
-        else:
-            # 備用方法：使用頸向量的Y分量
-            head_y_component = -n[1]  # 頸向量Y分量的負值
-            if head_y_component > 0.1:
-                neck_forward = True
-            elif head_y_component < -0.1:
-                neck_forward = False
-            else:
-                neck_forward = True  # 預設前屈
-
-        # 根據前後方向決定角度符號
-        if not neck_forward:  # 後仰
-            signed_neck_angle = -theta_neck  # 後仰顯示負角度
-        else:  # 前屈或中性
-            signed_neck_angle = theta_neck   # 前屈顯示正角度
-
-        angle_data['neck_angle'] = round(signed_neck_angle, 2)
-
-        # RULA 評分基於絕對角度值（符合 pipeline.md 規則）
-        abs_theta_neck = abs(signed_neck_angle)
-
-        # RULA分數規則
-        if not neck_forward and abs_theta_neck > 5:  # 後仰且角度 > 5°
-            neck_score = 4  # 後仰特殊情況
-        elif abs_theta_neck < 10:
+        # 移除後仰判定：頸部一律用非負角度計分，避免出現後仰結果。
+        if theta_neck < 10:
             neck_score = 1
-        elif abs_theta_neck < 20:
+        elif theta_neck < 20:
             neck_score = 2
-        else:  # abs_theta_neck ≥ 20°
+        else:
             neck_score = 3
     else:
         angle_data['neck_angle'] = 'NULL'
@@ -254,7 +241,7 @@ def rula_score_side(pose, side: str, previous_scores=None):
     trunk_indices = [L_SHOULDER, R_SHOULDER, L_HIP, R_HIP]
     if check_confidence(pose, trunk_indices):
         t = SHO_C - HIP_C  # 軀幹向量（髖→肩，向上）
-        VERTICAL_UP = np.array([0, -1, 0])  # 垂直向上參考向量（MediaPipe 坐標系）
+        VERTICAL_UP = np.array([0, -1, 0])  # 垂直向上參考向量（Kinect/MediaPipe 坐標系）
         theta_trunk = safe_angle(t, VERTICAL_UP)  # 計算軀幹與垂直方向的夾角
         angle_data['trunk_angle'] = round(theta_trunk, 2)
 
