@@ -23,7 +23,8 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFrame, QSizePolicy, QCheckBox,
-    QFileDialog, QMessageBox, QScrollArea, QSplitter, QSlider, QTabWidget
+    QFileDialog, QMessageBox, QScrollArea, QSplitter, QSlider, QTabWidget,
+    QDialog
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap, QFont
@@ -345,6 +346,13 @@ class ResultWindow(QMainWindow):
             'padding:0 12px; font-size:12px; font-weight:bold;'
         )
         nav_row.addWidget(self._score_badge)
+
+        self._metrics_btn = QPushButton()
+        self._metrics_btn.setStyleSheet(BACK_BTN_STYLE)
+        self._metrics_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._metrics_btn.clicked.connect(self._show_frame_metrics_dialog)
+        nav_row.addWidget(self._metrics_btn)
+
         nav_row.addStretch()
         cc.addLayout(nav_row)
 
@@ -629,6 +637,7 @@ class ResultWindow(QMainWindow):
 
         self._prev_btn.setText(t('result_prev_btn'))
         self._next_btn.setText(t('result_next_btn'))
+        self._metrics_btn.setText(t('result_metrics_btn'))
         # Play/pause button: set based on current state
         if self._play_timer.isActive():
             self._play_btn.setText(t('result_pause_btn'))
@@ -764,6 +773,136 @@ class ResultWindow(QMainWindow):
                 f'background:{bg}; color:{fg}; border-radius:10px;'
                 'padding:0 12px; font-size:12px; font-weight:bold;'
             )
+
+    # ── Frame Metrics Dialog ──────────────────────────────────────────────────
+    def _show_frame_metrics_dialog(self):
+        if not self._records:
+            return
+        rec = self._records[self._current_idx]
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(t('result_metrics_title'))
+        dlg.setMinimumWidth(600)
+        dlg.setStyleSheet('QDialog { background: #f8fafc; }')
+
+        outer = QVBoxLayout(dlg)
+        outer.setSpacing(12)
+        outer.setContentsMargins(20, 16, 20, 20)
+
+        # Frame info
+        info_lbl = QLabel(
+            t('result_frame_counter').format(self._current_idx + 1, len(self._records))
+            + '   '
+            + t('result_time_label').format(rec.get('timestamp', 0))
+        )
+        info_lbl.setStyleSheet('color: #64748b; font-size: 12px;')
+        outer.addWidget(info_lbl)
+
+        def _fmt_angle(v):
+            if v is None or v == 'NULL':
+                return 'NULL'
+            try:
+                return f'{float(v):.1f}°'
+            except (ValueError, TypeError):
+                return str(v)
+
+        def _fmt_score(v):
+            if v is None or v == 'NULL':
+                return 'NULL'
+            return str(v)
+
+        def _make_section(title, rows, bg='#f1f5f9'):
+            frame = QFrame()
+            frame.setStyleSheet(
+                f'QFrame {{ background: {bg}; border-radius: 8px; }}'
+                'QLabel { background: transparent; }'
+            )
+            col = QVBoxLayout(frame)
+            col.setContentsMargins(12, 10, 12, 10)
+            col.setSpacing(5)
+            title_lbl = QLabel(title)
+            title_lbl.setFont(QFont('Microsoft JhengHei', 11, QFont.Weight.Bold))
+            title_lbl.setStyleSheet('color: #0f172a;')
+            col.addWidget(title_lbl)
+            for label, value in rows:
+                r = QHBoxLayout()
+                lbl = QLabel(label)
+                lbl.setStyleSheet('color: #475569; font-size: 12px;')
+                is_null = (value == 'NULL')
+                val_lbl = QLabel(value)
+                val_lbl.setStyleSheet(
+                    f'color: {"#ef4444" if is_null else "#0f172a"};'
+                    'font-size: 12px; font-family: Consolas, monospace;'
+                )
+                val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
+                r.addWidget(lbl)
+                r.addStretch()
+                r.addWidget(val_lbl)
+                col.addLayout(r)
+            return frame
+
+        # Angles row
+        angles_row = QHBoxLayout()
+        angles_row.setSpacing(10)
+        angles_row.addWidget(_make_section(
+            t('result_metrics_left_angles'),
+            [
+                ('Upper Arm', _fmt_angle(rec.get('left_upper_arm_angle'))),
+                ('Lower Arm', _fmt_angle(rec.get('left_lower_arm_angle'))),
+                ('Wrist',     _fmt_angle(rec.get('left_wrist_angle'))),
+                ('Neck',      _fmt_angle(rec.get('left_neck_angle'))),
+                ('Trunk',     _fmt_angle(rec.get('left_trunk_angle'))),
+            ],
+            '#f0f9ff',
+        ))
+        angles_row.addWidget(_make_section(
+            t('result_metrics_right_angles'),
+            [
+                ('Upper Arm', _fmt_angle(rec.get('right_upper_arm_angle'))),
+                ('Lower Arm', _fmt_angle(rec.get('right_lower_arm_angle'))),
+                ('Wrist',     _fmt_angle(rec.get('right_wrist_angle'))),
+                ('Neck',      _fmt_angle(rec.get('right_neck_angle'))),
+                ('Trunk',     _fmt_angle(rec.get('right_trunk_angle'))),
+            ],
+            '#f0fdf4',
+        ))
+        outer.addLayout(angles_row)
+
+        # Table scores row
+        scores_row = QHBoxLayout()
+        scores_row.setSpacing(10)
+        final_score_key = t('final_score')
+        scores_row.addWidget(_make_section(
+            t('result_metrics_left_scores'),
+            [
+                ('Table A',       _fmt_score(rec.get('left_posture_score_a'))),
+                ('Table B',       _fmt_score(rec.get('left_posture_score_b'))),
+                (final_score_key, _fmt_score(rec.get('left_score'))),
+            ],
+            '#eff6ff',
+        ))
+        scores_row.addWidget(_make_section(
+            t('result_metrics_right_scores'),
+            [
+                ('Table A',       _fmt_score(rec.get('right_posture_score_a'))),
+                ('Table B',       _fmt_score(rec.get('right_posture_score_b'))),
+                (final_score_key, _fmt_score(rec.get('right_score'))),
+            ],
+            '#fefce8',
+        ))
+        outer.addLayout(scores_row)
+
+        # Close button
+        close_btn = QPushButton(t('result_close_btn'))
+        close_btn.setStyleSheet(BACK_BTN_STYLE)
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.clicked.connect(dlg.accept)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_row.addWidget(close_btn)
+        outer.addLayout(btn_row)
+
+        dlg.exec()
 
     # ── Controls ──────────────────────────────────────────────────────────────
     def _prev_frame(self):

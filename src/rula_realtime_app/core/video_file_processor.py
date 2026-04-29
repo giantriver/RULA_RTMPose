@@ -177,6 +177,22 @@ class VideoFileProcessor(QObject):
                         'best_score':        score_num,
                         'left_score':        rula_left.get('score', 'NULL')  if rula_left  else 'NULL',
                         'right_score':       rula_right.get('score', 'NULL') if rula_right else 'NULL',
+                        # 左側角度資料
+                        'left_upper_arm_angle':  rula_left.get('upper_arm_angle', 'NULL') if rula_left else 'NULL',
+                        'left_lower_arm_angle':  rula_left.get('lower_arm_angle', 'NULL') if rula_left else 'NULL',
+                        'left_wrist_angle':      rula_left.get('wrist_angle',     'NULL') if rula_left else 'NULL',
+                        'left_neck_angle':       rula_left.get('neck_angle',      'NULL') if rula_left else 'NULL',
+                        'left_trunk_angle':      rula_left.get('trunk_angle',     'NULL') if rula_left else 'NULL',
+                        'left_posture_score_a':  rula_left.get('posture_score_a', 'NULL') if rula_left else 'NULL',
+                        'left_posture_score_b':  rula_left.get('posture_score_b', 'NULL') if rula_left else 'NULL',
+                        # 右側角度資料
+                        'right_upper_arm_angle': rula_right.get('upper_arm_angle', 'NULL') if rula_right else 'NULL',
+                        'right_lower_arm_angle': rula_right.get('lower_arm_angle', 'NULL') if rula_right else 'NULL',
+                        'right_wrist_angle':     rula_right.get('wrist_angle',     'NULL') if rula_right else 'NULL',
+                        'right_neck_angle':      rula_right.get('neck_angle',      'NULL') if rula_right else 'NULL',
+                        'right_trunk_angle':     rula_right.get('trunk_angle',     'NULL') if rula_right else 'NULL',
+                        'right_posture_score_a': rula_right.get('posture_score_a', 'NULL') if rula_right else 'NULL',
+                        'right_posture_score_b': rula_right.get('posture_score_b', 'NULL') if rula_right else 'NULL',
                         # 原生繪圖資料（保存所有關節，供歷史重播）
                         'native_draw_data':  serializable_native_draw_data,
                     })

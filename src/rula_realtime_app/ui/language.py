@@ -1056,6 +1056,30 @@ TRANSLATIONS = {
         'en': 'Pie Distribution',
         'zh_TW': '圓餅分布'
     },
+    'result_metrics_btn': {
+        'en': '📐 Angles & Scores',
+        'zh_TW': '📐 角度與分數'
+    },
+    'result_metrics_title': {
+        'en': 'Frame Angles & Table Scores',
+        'zh_TW': '當前幀角度與 Table 分數'
+    },
+    'result_metrics_left_angles': {
+        'en': 'Left Side Angles',
+        'zh_TW': '左側角度'
+    },
+    'result_metrics_right_angles': {
+        'en': 'Right Side Angles',
+        'zh_TW': '右側角度'
+    },
+    'result_metrics_left_scores': {
+        'en': 'Left Table Scores',
+        'zh_TW': '左側 Table 分數'
+    },
+    'result_metrics_right_scores': {
+        'en': 'Right Table Scores',
+        'zh_TW': '右側 Table 分數'
+    },
     'result_export_dialog_title': {
         'en': 'Save CSV Report',
         'zh_TW': '儲存 CSV 報告'
