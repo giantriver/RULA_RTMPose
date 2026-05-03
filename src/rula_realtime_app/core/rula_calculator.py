@@ -119,7 +119,6 @@ def rula_score_side(pose, side: str, previous_scores=None):
             upper_arm_score = 1
 
     point_score['upper_arm'] = upper_arm_score
-    point_score['upper_arm_adjustment'] = 0
 
     # A-2: Lower Arm（肘屈曲角）
     lower_arm_indices = [L_ELBOW, L_WRIST] if side == 'Left' else [R_ELBOW, R_WRIST]
@@ -141,7 +140,6 @@ def rula_score_side(pose, side: str, previous_scores=None):
             lower_arm_score = 1
 
     point_score['lower_arm'] = lower_arm_score
-    point_score['lower_arm_adjustment'] = 0
 
     # A-3: Wrist Position（手腕屈伸角）- 根據 pipeline.md 方法
     wrist_indices = [L_WRIST, L_INDEX, L_PINKY] if side == 'Left' else [R_WRIST, R_INDEX, R_PINKY]
@@ -171,7 +169,6 @@ def rula_score_side(pose, side: str, previous_scores=None):
             wrist_score = 1
 
     point_score['wrist'] = wrist_score
-    point_score['wrist_adjustment'] = 0
 
     # B-1: Neck（頸角）- 矢狀面投影方法
     head_indices = [L_EAR, R_EAR]
@@ -240,7 +237,6 @@ def rula_score_side(pose, side: str, previous_scores=None):
             neck_score = 1
 
     point_score['neck'] = neck_score
-    point_score['neck_adjustment'] = 0
 
     # B-2: Trunk（軀幹角）
     trunk_indices = [L_SHOULDER, R_SHOULDER, L_HIP, R_HIP]
@@ -266,7 +262,6 @@ def rula_score_side(pose, side: str, previous_scores=None):
             trunk_score = 1
 
     point_score['trunk'] = trunk_score
-    point_score['trunk_adjustment'] = 0
 
     # 固定/預設參數（從設定檔取得）
     wrist_twist = RULA_CONFIG['wrist_twist']

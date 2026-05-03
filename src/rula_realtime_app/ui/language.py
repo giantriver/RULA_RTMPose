@@ -909,6 +909,7 @@ TRANSLATIONS = {
     'history_col_created':  {'en': 'Upload Time',   'zh_TW': '上傳時間'},
     'history_col_max':      {'en': 'Max Score',     'zh_TW': '最高分'},
     'history_col_avg':      {'en': 'Avg Score',     'zh_TW': '平均分'},
+    'history_col_backend':  {'en': 'Model',         'zh_TW': '辨識模型'},
     'history_col_actions':  {'en': 'Actions',       'zh_TW': '操作'},
     'history_view_btn': {
         'en': 'View',

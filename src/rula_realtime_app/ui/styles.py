@@ -50,21 +50,23 @@ def _button_style(normal_light, normal_dark, hover_light, hover_dark,
     """Generate button stylesheet with gradient, hover, and pressed states"""
     # 只在有指定寬度時設定 min-width 和 max-width
     width_style = f"min-width: {width}px; max-width: {width}px;" if width else ""
+    pad_v = 12 if font_size == 16 else 8
+    pad_h = 16 if font_size == 16 else 12
+    grad_n = f"qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {normal_light}, stop:1 {normal_dark})"
+    grad_h = f"qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {hover_light}, stop:1 {hover_dark})"
     return f"""
             QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {normal_light}, stop:1 {normal_dark});
+                background: {grad_n};
                 color: white;
                 font-size: {font_size}px;
                 font-weight: bold;
-                padding: {12 if font_size == 16 else 8}px {16 if font_size == 16 else 12}px;
+                padding: {pad_v}px {pad_h}px;
                 border: none;
                 border-radius: 8px;
                 {width_style}
             }}
             QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {hover_light}, stop:1 {hover_dark});
+                background: {grad_h};
             }}
             QPushButton:pressed {{
                 background: {pressed};
@@ -166,15 +168,13 @@ def _dialog_style():
             QRadioButton::indicator:checked {{
                 background-color: {PRIMARY_ACCENT};
                 border: 2px solid {PRIMARY_ACCENT};
-                background: qradialgradient(cx:0.5, cy:0.5, radius:0.5,
-                    fx:0.5, fy:0.5, stop:0 #ffffff, stop:0.5 {PRIMARY_ACCENT}, stop:1 {PRIMARY_ACCENT});
+                background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #ffffff, stop:0.5 {PRIMARY_ACCENT}, stop:1 {PRIMARY_ACCENT});
             }}
             QRadioButton::indicator:hover {{
                 border: 2px solid #5dade2;
             }}
             QPushButton {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {PRIMARY_ACCENT}, stop:1 #2980b9);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {PRIMARY_ACCENT}, stop:1 #2980b9);
                 color: white;
                 font-size: 14px;
                 font-weight: bold;
@@ -184,8 +184,7 @@ def _dialog_style():
                 min-width: 80px;
             }}
             QPushButton:hover {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #5dade2, stop:1 {PRIMARY_ACCENT});
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5dade2, stop:1 {PRIMARY_ACCENT});
             }}
         """
 

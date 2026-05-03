@@ -105,8 +105,9 @@ class VideoFileProcessor(QObject):
                     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     detected = detector.process_frame(rgb)
 
-                    rula_left  = None
-                    rula_right = None
+                    rula_left    = None
+                    rula_right   = None
+                    landmarks_arr = None
 
                     native_draw_data = None
                     if detected:
@@ -312,6 +313,7 @@ def export_csv(results: dict, csv_path: str):
         return
     with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(f, fieldnames=['frame', 'timestamp',
-                                               'best_score', 'left_score', 'right_score'])
+                                               'best_score', 'left_score', 'right_score'],
+                                extrasaction='ignore')
         writer.writeheader()
         writer.writerows(records)

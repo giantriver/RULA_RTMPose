@@ -24,7 +24,6 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QFrame, QSizePolicy, QCheckBox,
     QFileDialog, QMessageBox, QScrollArea, QSplitter, QSlider, QTabWidget,
-    QDialog
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QImage, QPixmap, QFont
@@ -155,14 +154,22 @@ def _render_3d_skeleton_pixmap(landmarks_3d: list,
     _vis_mask = vs > 0.3
     if _vis_mask.any():
         _pad = 0.15
-        ax.set_xlim(xs[_vis_mask].min() - _pad, xs[_vis_mask].max() + _pad)
-        ax.set_ylim(zs[_vis_mask].min() - _pad, zs[_vis_mask].max() + _pad)
-        ax.set_zlim(-ys[_vis_mask].max() - _pad, -ys[_vis_mask].min() + _pad)
+        x_min = xs[_vis_mask].min() - _pad
+        x_max = xs[_vis_mask].max() + _pad
+        y_min = zs[_vis_mask].min() - _pad
+        y_max = zs[_vis_mask].max() + _pad
+        z_min = -ys[_vis_mask].max() - _pad
+        z_max = -ys[_vis_mask].min() + _pad
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        ax.set_zlim(z_min, z_max)
+        ax.set_box_aspect([x_max - x_min, y_max - y_min, z_max - z_min])
     else:
         ax.set_xlim(-0.6, 0.6)
         ax.set_ylim(-0.6, 0.6)
         ax.set_zlim(-1.2, 0.4)
-    ax.view_init(elev=20, azim=-70)
+        ax.set_box_aspect([1.2, 1.2, 1.6])
+    ax.view_init(elev=10, azim=-65)
 
     buf = BytesIO()
     fig.savefig(buf, format='png', bbox_inches='tight', pad_inches=0.02,
@@ -170,7 +177,6 @@ def _render_3d_skeleton_pixmap(landmarks_3d: list,
     plt.close(fig)
     buf.seek(0)
 
-    from PyQt6.QtGui import QPixmap
     pixmap = QPixmap()
     pixmap.loadFromData(buf.getvalue(), 'PNG')
     return pixmap if not pixmap.isNull() else None
@@ -597,7 +603,7 @@ class ResultWindow(QMainWindow):
                 background: #f1f5f9; border-radius: 6px; margin-right: 4px;
             }
             QTabBar::tab:selected { background: #2563eb; color: #ffffff; font-weight: bold; }
-            QTabBar::tab:hover:!selected { background: #e2e8f0; }
+            QTabBar::tab:hover    { background: #e2e8f0; }
         """)
 
         self._chart_tabs.addTab(self._build_line_tab(), '')
