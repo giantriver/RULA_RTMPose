@@ -98,7 +98,7 @@ def rula_score_side(pose, side: str, previous_scores=None):
 
     # A-1: Upper Arm（上臂屈伸角）
     upper_arm_indices = [L_SHOULDER, L_ELBOW] if side == 'Left' else [R_SHOULDER, R_ELBOW]
-    if check_confidence(pose, upper_arm_indices):
+    if check_confidence(pose, upper_arm_indices + [L_HIP, R_HIP]):
         v_sh_el = EL - SH
         theta_upper = safe_angle(v_sh_el, v_body)
         angle_data['upper_arm_angle'] = round(theta_upper, 2)

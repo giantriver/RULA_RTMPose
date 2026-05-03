@@ -35,6 +35,7 @@ from .styles import (
     BACK_BTN_STYLE, EMERALD_BTN_STYLE,
 )
 from .language import language_manager, t
+from .dialogs import FrameMetricsDialog
 
 
 _SCORE_COLORS = {
@@ -68,6 +69,111 @@ def _setup_matplotlib_cjk_font() -> None:
 
 
 _setup_matplotlib_cjk_font()
+
+
+# BlazePose 33-keypoint connections (MediaPipe index pairs + color)
+_SKELETON_CONNECTIONS = [
+    # head
+    (0, 1, 'cyan'), (1, 2, 'cyan'), (2, 3, 'cyan'), (3, 7, 'cyan'),
+    (0, 4, 'cyan'), (4, 5, 'cyan'), (5, 6, 'cyan'), (6, 8, 'cyan'),
+    (9, 10, 'cyan'),
+    # torso
+    (11, 12, 'yellow'), (11, 23, 'yellow'), (12, 24, 'yellow'), (23, 24, 'yellow'),
+    # left arm
+    (11, 13, '#4dabf7'), (13, 15, '#4dabf7'), (15, 17, '#4dabf7'),
+    (15, 19, '#4dabf7'), (15, 21, '#4dabf7'), (17, 19, '#4dabf7'),
+    # right arm
+    (12, 14, '#ff6b6b'), (14, 16, '#ff6b6b'), (16, 18, '#ff6b6b'),
+    (16, 20, '#ff6b6b'), (16, 22, '#ff6b6b'), (18, 20, '#ff6b6b'),
+    # left leg
+    (23, 25, '#4dabf7'), (25, 27, '#4dabf7'), (27, 29, '#4dabf7'),
+    (27, 31, '#4dabf7'), (29, 31, '#4dabf7'),
+    # right leg
+    (24, 26, '#ff6b6b'), (26, 28, '#ff6b6b'), (28, 30, '#ff6b6b'),
+    (28, 32, '#ff6b6b'), (30, 32, '#ff6b6b'),
+]
+
+
+def _render_3d_skeleton_pixmap(landmarks_3d: list,
+                               width: int = 340,
+                               height: int = 380) -> 'QPixmap | None':
+    """
+    Render a 3D skeleton from landmarks_3d (33 × [x,y,z,conf]) into a QPixmap.
+    Returns None when landmarks_3d is empty or too short.
+    """
+    from io import BytesIO
+    if not landmarks_3d or len(landmarks_3d) < 33:
+        return None
+
+    arr = np.asarray(landmarks_3d, dtype=np.float64)
+    xs, ys, zs, vs = arr[:, 0], arr[:, 1], arr[:, 2], arr[:, 3]
+
+    dpi = 100
+    fig = plt.figure(figsize=(width / dpi, height / dpi), dpi=dpi, facecolor='white')
+    ax = fig.add_subplot(111, projection='3d', facecolor='white')
+    # Expand axes to fill more of the figure area and trim outer whitespace
+    fig.subplots_adjust(left=0.0, right=0.88, top=0.99, bottom=0.01)
+
+    for i, j, color in _SKELETON_CONNECTIONS:
+        if i < len(vs) and j < len(vs) and vs[i] > 0.3 and vs[j] > 0.3:
+            # darken cyan/yellow for white bg readability
+            c = {'cyan': '#0891b2', 'yellow': '#b45309'}.get(color, color)
+            ax.plot(
+                [xs[i], xs[j]], [zs[i], zs[j]], [-ys[i], -ys[j]],
+                color=c, linewidth=2.2, alpha=0.9,
+            )
+
+    cmap = plt.cm.plasma
+    norm = plt.Normalize(0.0, 1.0)
+    for k in range(min(33, len(vs))):
+        if vs[k] > 0.3:
+            ax.scatter(xs[k], zs[k], -ys[k],
+                       color=cmap(norm(vs[k])), s=18, zorder=5, depthshade=False,
+                       edgecolors='#334155', linewidths=0.4)
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, pad=0.05, fraction=0.03, shrink=0.55)
+    cbar.set_label('Confidence', color='#334155', fontsize=7)
+    cbar.ax.yaxis.set_tick_params(color='#334155')
+    plt.setp(cbar.ax.yaxis.get_ticklabels(), color='#334155', fontsize=6)
+    cbar.set_ticks([0.0, 0.5, 1.0])
+    cbar.set_ticklabels(['Low', '0.5', 'High'])
+
+    for axis in [ax.xaxis, ax.yaxis, ax.zaxis]:
+        axis.label.set_color('#334155')
+        axis.set_tick_params(colors='#64748b', labelsize=5)
+        axis.pane.fill = False
+        axis.pane.set_edgecolor('#cbd5e1')
+        axis._axinfo['grid']['color'] = '#e2e8f0'
+
+    ax.set_xlabel('X', fontsize=6, color='#334155')
+    ax.set_ylabel('Z', fontsize=6, color='#334155')
+    ax.set_zlabel('Y', fontsize=6, color='#334155')
+
+    # auto-fit axis limits from visible joints with a small margin
+    _vis_mask = vs > 0.3
+    if _vis_mask.any():
+        _pad = 0.15
+        ax.set_xlim(xs[_vis_mask].min() - _pad, xs[_vis_mask].max() + _pad)
+        ax.set_ylim(zs[_vis_mask].min() - _pad, zs[_vis_mask].max() + _pad)
+        ax.set_zlim(-ys[_vis_mask].max() - _pad, -ys[_vis_mask].min() + _pad)
+    else:
+        ax.set_xlim(-0.6, 0.6)
+        ax.set_ylim(-0.6, 0.6)
+        ax.set_zlim(-1.2, 0.4)
+    ax.view_init(elev=20, azim=-70)
+
+    buf = BytesIO()
+    fig.savefig(buf, format='png', bbox_inches='tight', pad_inches=0.02,
+                facecolor=fig.get_facecolor(), dpi=dpi)
+    plt.close(fig)
+    buf.seek(0)
+
+    from PyQt6.QtGui import QPixmap
+    pixmap = QPixmap()
+    pixmap.loadFromData(buf.getvalue(), 'PNG')
+    return pixmap if not pixmap.isNull() else None
 
 
 def _draw_mediapipe_skeleton(frame_rgb: np.ndarray,
@@ -779,129 +885,17 @@ class ResultWindow(QMainWindow):
         if not self._records:
             return
         rec = self._records[self._current_idx]
-
-        dlg = QDialog(self)
-        dlg.setWindowTitle(t('result_metrics_title'))
-        dlg.setMinimumWidth(600)
-        dlg.setStyleSheet('QDialog { background: #f8fafc; }')
-
-        outer = QVBoxLayout(dlg)
-        outer.setSpacing(12)
-        outer.setContentsMargins(20, 16, 20, 20)
-
-        # Frame info
-        info_lbl = QLabel(
+        frame_label = (
             t('result_frame_counter').format(self._current_idx + 1, len(self._records))
             + '   '
             + t('result_time_label').format(rec.get('timestamp', 0))
         )
-        info_lbl.setStyleSheet('color: #64748b; font-size: 12px;')
-        outer.addWidget(info_lbl)
-
-        def _fmt_angle(v):
-            if v is None or v == 'NULL':
-                return 'NULL'
-            try:
-                return f'{float(v):.1f}°'
-            except (ValueError, TypeError):
-                return str(v)
-
-        def _fmt_score(v):
-            if v is None or v == 'NULL':
-                return 'NULL'
-            return str(v)
-
-        def _make_section(title, rows, bg='#f1f5f9'):
-            frame = QFrame()
-            frame.setStyleSheet(
-                f'QFrame {{ background: {bg}; border-radius: 8px; }}'
-                'QLabel { background: transparent; }'
-            )
-            col = QVBoxLayout(frame)
-            col.setContentsMargins(12, 10, 12, 10)
-            col.setSpacing(5)
-            title_lbl = QLabel(title)
-            title_lbl.setFont(QFont('Microsoft JhengHei', 11, QFont.Weight.Bold))
-            title_lbl.setStyleSheet('color: #0f172a;')
-            col.addWidget(title_lbl)
-            for label, value in rows:
-                r = QHBoxLayout()
-                lbl = QLabel(label)
-                lbl.setStyleSheet('color: #475569; font-size: 12px;')
-                is_null = (value == 'NULL')
-                val_lbl = QLabel(value)
-                val_lbl.setStyleSheet(
-                    f'color: {"#ef4444" if is_null else "#0f172a"};'
-                    'font-size: 12px; font-family: Consolas, monospace;'
-                )
-                val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
-                r.addWidget(lbl)
-                r.addStretch()
-                r.addWidget(val_lbl)
-                col.addLayout(r)
-            return frame
-
-        # Angles row
-        angles_row = QHBoxLayout()
-        angles_row.setSpacing(10)
-        angles_row.addWidget(_make_section(
-            t('result_metrics_left_angles'),
-            [
-                ('Upper Arm', _fmt_angle(rec.get('left_upper_arm_angle'))),
-                ('Lower Arm', _fmt_angle(rec.get('left_lower_arm_angle'))),
-                ('Wrist',     _fmt_angle(rec.get('left_wrist_angle'))),
-                ('Neck',      _fmt_angle(rec.get('left_neck_angle'))),
-                ('Trunk',     _fmt_angle(rec.get('left_trunk_angle'))),
-            ],
-            '#f0f9ff',
-        ))
-        angles_row.addWidget(_make_section(
-            t('result_metrics_right_angles'),
-            [
-                ('Upper Arm', _fmt_angle(rec.get('right_upper_arm_angle'))),
-                ('Lower Arm', _fmt_angle(rec.get('right_lower_arm_angle'))),
-                ('Wrist',     _fmt_angle(rec.get('right_wrist_angle'))),
-                ('Neck',      _fmt_angle(rec.get('right_neck_angle'))),
-                ('Trunk',     _fmt_angle(rec.get('right_trunk_angle'))),
-            ],
-            '#f0fdf4',
-        ))
-        outer.addLayout(angles_row)
-
-        # Table scores row
-        scores_row = QHBoxLayout()
-        scores_row.setSpacing(10)
-        final_score_key = t('final_score')
-        scores_row.addWidget(_make_section(
-            t('result_metrics_left_scores'),
-            [
-                ('Table A',       _fmt_score(rec.get('left_posture_score_a'))),
-                ('Table B',       _fmt_score(rec.get('left_posture_score_b'))),
-                (final_score_key, _fmt_score(rec.get('left_score'))),
-            ],
-            '#eff6ff',
-        ))
-        scores_row.addWidget(_make_section(
-            t('result_metrics_right_scores'),
-            [
-                ('Table A',       _fmt_score(rec.get('right_posture_score_a'))),
-                ('Table B',       _fmt_score(rec.get('right_posture_score_b'))),
-                (final_score_key, _fmt_score(rec.get('right_score'))),
-            ],
-            '#fefce8',
-        ))
-        outer.addLayout(scores_row)
-
-        # Close button
-        close_btn = QPushButton(t('result_close_btn'))
-        close_btn.setStyleSheet(BACK_BTN_STYLE)
-        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        close_btn.clicked.connect(dlg.accept)
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        btn_row.addWidget(close_btn)
-        outer.addLayout(btn_row)
-
+        dlg = FrameMetricsDialog(
+            rec=rec,
+            frame_label=frame_label,
+            render_3d_fn=_render_3d_skeleton_pixmap,
+            parent=self,
+        )
         dlg.exec()
 
     # ── Controls ──────────────────────────────────────────────────────────────

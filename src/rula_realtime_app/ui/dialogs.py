@@ -5,13 +5,17 @@
 - RULA 固定參數設定（Table A/B 參數）
 - 即時姿勢辨識後端切換（MediaPipe / RTMW3D）
 - 語言切換與套用
+- FrameMetricsDialog：單幀角度、Table 分數與 3D 骨架
 """
 
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
                              QGridLayout, QPushButton, QRadioButton, QButtonGroup,
-                             QScrollArea, QWidget, QFrame)
+                             QScrollArea, QWidget, QFrame, QSizePolicy)
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
 from ..core import config
-from .styles import RULA_CONFIG_DIALOG_STYLE
+from ..core.config import RTMW_TO_MEDIAPIPE
+from .styles import RULA_CONFIG_DIALOG_STYLE, BACK_BTN_STYLE
 from .language import language_manager, t
 
 
@@ -363,4 +367,343 @@ class LanguageSelectionDialog(QDialog):
     
     def get_selected_language(self):
         """获取选择的语言"""
-        return self.selected_language    
+        return self.selected_language
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# FrameMetricsDialog
+# ──────────────────────────────────────────────────────────────────────────────
+
+#: Joint indices required for each body part confidence check
+_JOINT_GROUPS = {
+    ('left',  'Upper Arm'): [(11, 'L Shoulder'), (13, 'L Elbow'),
+                              (23, 'L Hip'), (24, 'R Hip')],
+    ('right', 'Upper Arm'): [(12, 'R Shoulder'), (14, 'R Elbow'),
+                              (23, 'L Hip'), (24, 'R Hip')],
+    ('left',  'Lower Arm'): [(11, 'L Shoulder'), (13, 'L Elbow'), (15, 'L Wrist')],
+    ('right', 'Lower Arm'): [(12, 'R Shoulder'), (14, 'R Elbow'), (16, 'R Wrist')],
+    ('left',  'Wrist'):     [(15, 'L Wrist'), (17, 'L Pinky'), (19, 'L Index')],
+    ('right', 'Wrist'):     [(16, 'R Wrist'), (18, 'R Pinky'), (20, 'R Index')],
+    ('left',  'Neck'):      [(7, 'L Ear'), (8, 'R Ear'), (11, 'L Shoulder'),
+                              (12, 'R Shoulder'), (23, 'L Hip'), (24, 'R Hip')],
+    ('right', 'Neck'):      [(7, 'L Ear'), (8, 'R Ear'), (11, 'L Shoulder'),
+                              (12, 'R Shoulder'), (23, 'L Hip'), (24, 'R Hip')],
+    ('left',  'Trunk'):     [(11, 'L Shoulder'), (12, 'R Shoulder'),
+                              (23, 'L Hip'), (24, 'R Hip')],
+    ('right', 'Trunk'):     [(11, 'L Shoulder'), (12, 'R Shoulder'),
+                              (23, 'L Hip'), (24, 'R Hip')],
+}
+
+_MIN_CONF = 0.5
+
+
+class FrameMetricsDialog(QDialog):
+    """
+    單幀角度、Table A/B 分數與 3D 骨架對話框。
+
+    Parameters
+    ----------
+    rec : dict
+        records 清單中的單一幀資料字典（含 native_draw_data、角度、分數欄位）。
+    frame_label : str
+        顯示在頂部的幀資訊文字（例如 "Frame 3 / 615   Time: 0.10 s"）。
+    render_3d_fn : callable
+        簽名：(landmarks_3d: list, width: int, height: int) -> QPixmap | None
+        由 result_window 傳入，避免在此模組重複引入 matplotlib 相關依賴。
+    parent : QWidget, optional
+    """
+
+    # ── Layout constants (easy to tweak) ─────────────────────────────────────
+    SKL_W: int = 420        # 3D 骨架圖寬度（px）
+    SKL_H: int = 420        # 3D 骨架圖高度（px）
+    DLG_MIN_W: int = 1080   # 對話框最小寬度
+    RIGHT_MIN_W: int = 580  # 右側面板最小寬度
+    SECTION_MIN_W: int = 240  # 每個 section card 最小寬度
+
+    def __init__(self, rec: dict, frame_label: str, render_3d_fn, parent=None):
+        super().__init__(parent)
+        self._rec = rec
+        self._frame_label = frame_label
+        self._render_3d_fn = render_3d_fn
+
+        self.setWindowTitle(t('result_metrics_title'))
+        self.setMinimumWidth(self.DLG_MIN_W)
+        self.setStyleSheet('QDialog { background: #f8fafc; }')
+
+        native = rec.get('native_draw_data') or {}
+        self._native = native
+        self._backend = str(native.get('backend', '')).upper()
+
+        outer = QVBoxLayout(self)
+        outer.setSpacing(8)
+        outer.setContentsMargins(20, 10, 20, 12)
+
+        # ── Frame info ────────────────────────────────────────────────────────
+        info_lbl = QLabel(frame_label)
+        info_lbl.setStyleSheet('color: #64748b; font-size: 12px;')
+        outer.addWidget(info_lbl)
+
+        # ── Body row ──────────────────────────────────────────────────────────
+        body_row = QHBoxLayout()
+        body_row.setSpacing(14)
+        body_row.addWidget(self._build_skeleton_panel())
+        body_row.addWidget(self._build_right_panel(), 1)
+        outer.addLayout(body_row, 1)
+
+        # ── Close button ──────────────────────────────────────────────────────
+        close_btn = QPushButton(t('result_close_btn'))
+        close_btn.setStyleSheet(BACK_BTN_STYLE)
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.clicked.connect(self.accept)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_row.addWidget(close_btn)
+        outer.addLayout(btn_row)
+
+    # ── Private builders ──────────────────────────────────────────────────────
+
+    def _build_skeleton_panel(self) -> QFrame:
+        w, h = self.SKL_W, self.SKL_H
+        panel = QFrame()
+        panel.setFixedSize(w, h + 28)
+        panel.setStyleSheet(
+            'QFrame { background: white; border-radius: 8px; border: 1px solid #e2e8f0; }'
+            'QLabel { background: transparent; }'
+        )
+        col = QVBoxLayout(panel)
+        col.setContentsMargins(0, 4, 0, 0)
+        col.setSpacing(2)
+
+        title = QLabel('3D Skeleton')
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet('color: #475569; font-size: 11px;')
+        col.addWidget(title)
+
+        img_lbl = QLabel()
+        img_lbl.setFixedSize(w, h)
+        img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        col.addWidget(img_lbl)
+
+        lm3d = self._native.get('landmarks_3d', [])
+        pixmap = self._render_3d_fn(lm3d, w, h)
+        if pixmap is not None:
+            img_lbl.setPixmap(
+                pixmap.scaled(w, h,
+                              Qt.AspectRatioMode.KeepAspectRatio,
+                              Qt.TransformationMode.SmoothTransformation)
+            )
+        else:
+            img_lbl.setText('No 3D data')
+            img_lbl.setStyleSheet('color: #94a3b8; font-size: 12px;')
+
+        return panel
+
+    def _build_right_panel(self) -> QWidget:
+        rec = self._rec
+        widget = QWidget()
+        widget.setMinimumWidth(self.RIGHT_MIN_W)
+        col = QVBoxLayout(widget)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(6)
+
+        # angles row (left + right)
+        angles_row = QHBoxLayout()
+        angles_row.setSpacing(10)
+        angles_row.addWidget(self._make_section(
+            t('result_metrics_left_angles'),
+            [
+                (t('upper_arm'), self._fmt_angle(rec.get('left_upper_arm_angle')),  'left',  'Upper Arm'),
+                (t('lower_arm'), self._fmt_angle(rec.get('left_lower_arm_angle')),  'left',  'Lower Arm'),
+                (t('wrist'),     self._fmt_angle(rec.get('left_wrist_angle')),      'left',  'Wrist'),
+                (t('neck'),      self._fmt_angle(rec.get('left_neck_angle')),       'left',  'Neck'),
+                (t('trunk'),     self._fmt_angle(rec.get('left_trunk_angle')),      'left',  'Trunk'),
+            ],
+            '#f0f9ff',
+        ))
+        angles_row.addWidget(self._make_section(
+            t('result_metrics_right_angles'),
+            [
+                (t('upper_arm'), self._fmt_angle(rec.get('right_upper_arm_angle')), 'right', 'Upper Arm'),
+                (t('lower_arm'), self._fmt_angle(rec.get('right_lower_arm_angle')), 'right', 'Lower Arm'),
+                (t('wrist'),     self._fmt_angle(rec.get('right_wrist_angle')),     'right', 'Wrist'),
+                (t('neck'),      self._fmt_angle(rec.get('right_neck_angle')),      'right', 'Neck'),
+                (t('trunk'),     self._fmt_angle(rec.get('right_trunk_angle')),     'right', 'Trunk'),
+            ],
+            '#f0fdf4',
+        ))
+        col.addLayout(angles_row, 3)
+
+        # scores row (left + right)
+        scores_row = QHBoxLayout()
+        scores_row.setSpacing(10)
+        final_key = t('final_score')
+        scores_row.addWidget(self._make_section(
+            t('result_metrics_left_scores'),
+            [
+                ('Table A',  self._fmt_score(rec.get('left_posture_score_a'))),
+                ('Table B',  self._fmt_score(rec.get('left_posture_score_b'))),
+                (final_key,  self._fmt_score(rec.get('left_score'))),
+            ],
+            '#eff6ff',
+        ))
+        scores_row.addWidget(self._make_section(
+            t('result_metrics_right_scores'),
+            [
+                ('Table A',  self._fmt_score(rec.get('right_posture_score_a'))),
+                ('Table B',  self._fmt_score(rec.get('right_posture_score_b'))),
+                (final_key,  self._fmt_score(rec.get('right_score'))),
+            ],
+            '#fefce8',
+        ))
+        col.addLayout(scores_row, 2)
+
+        return widget
+
+    def _make_section(self, title: str, rows: list, bg: str = '#f1f5f9') -> QFrame:
+        """
+        Build a labelled card.
+        rows: list of (label, value) or (label, value, side, part_name)
+        """
+        frame = QFrame()
+        frame.setStyleSheet(
+            f'QFrame {{ background: {bg}; border-radius: 8px; }}'
+            'QLabel { background: transparent; }'
+            'QPushButton { background: transparent; }'
+        )
+        frame.setMinimumWidth(self.SECTION_MIN_W)
+        frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        col = QVBoxLayout(frame)
+        col.setContentsMargins(12, 8, 12, 8)
+        col.setSpacing(4)
+
+        title_lbl = QLabel(title)
+        title_lbl.setFont(QFont('Microsoft JhengHei', 11, QFont.Weight.Bold))
+        title_lbl.setStyleSheet('color: #0f172a;')
+        col.addWidget(title_lbl)
+
+        for row_item in rows:
+            label, value = row_item[0], row_item[1]
+            click_side = row_item[2] if len(row_item) > 2 else None
+            click_part = row_item[3] if len(row_item) > 3 else None
+            is_null = (value == 'NULL')
+            r = QHBoxLayout()
+
+            if click_side is not None:
+                lbl = QPushButton(label + ' ›')
+                lbl.setFlat(True)
+                lbl.setCursor(Qt.CursorShape.PointingHandCursor)
+                lbl.setStyleSheet(
+                    f'QPushButton {{ color: {"#ef4444" if is_null else "#0369a1"};'
+                    'font-size: 12px; text-align: left; padding: 0; border: none; }}'
+                    f'QPushButton:hover {{ color: {"#b91c1c" if is_null else "#0284c7"};'
+                    'text-decoration: underline; }}'
+                )
+                _s, _p = click_side, click_part
+                lbl.clicked.connect(
+                    lambda checked=False, s=_s, p=_p: self._show_joint_popup(s, p)
+                )
+            else:
+                lbl = QLabel(label)
+                lbl.setStyleSheet('color: #475569; font-size: 12px;')
+
+            val_lbl = QLabel(value)
+            val_lbl.setStyleSheet(
+                f'color: {"#ef4444" if is_null else "#0f172a"};'
+                'font-size: 12px; font-family: Consolas, monospace;'
+            )
+            val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
+            r.addWidget(lbl)
+            r.addStretch()
+            r.addWidget(val_lbl)
+            col.addLayout(r)
+
+        col.addStretch()
+        return frame
+
+    def _show_joint_popup(self, side: str, part_name: str):
+        joints = _JOINT_GROUPS.get((side, part_name), [])
+        popup = QDialog(self)
+        popup.setWindowTitle(f'{part_name} — Joint Confidence')
+        popup.setMinimumWidth(300)
+        popup.setStyleSheet(
+            'QDialog { background: #1e293b; } QLabel { background: transparent; }'
+        )
+        layout = QVBoxLayout(popup)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(6)
+
+        title_lbl = QLabel(f'<b>{part_name}</b> required keypoints')
+        title_lbl.setStyleSheet('color: #94a3b8; font-size: 12px;')
+        layout.addWidget(title_lbl)
+
+        for idx, name in joints:
+            conf = self._get_conf(idx)
+            row = QHBoxLayout()
+            name_lbl = QLabel(f'[{idx:2d}] {name}')
+            name_lbl.setStyleSheet(
+                'color: #e2e8f0; font-size: 13px; font-family: Consolas, monospace;'
+            )
+            if conf is None:
+                conf_text, color = 'N/A', '#94a3b8'
+            else:
+                passes = conf >= _MIN_CONF
+                conf_text = f'{conf:.3f}  {"✓" if passes else "✗"}'
+                color = '#4ade80' if passes else '#f87171'
+            conf_lbl = QLabel(conf_text)
+            conf_lbl.setStyleSheet(
+                f'color: {color}; font-size: 13px; font-family: Consolas, monospace;'
+            )
+            conf_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
+            row.addWidget(name_lbl)
+            row.addStretch()
+            row.addWidget(conf_lbl)
+            layout.addLayout(row)
+
+        close = QPushButton('Close')
+        close.setStyleSheet(
+            'QPushButton { background:#334155; color:#e2e8f0; border-radius:6px;'
+            'padding:4px 14px; font-size:12px; }'
+            'QPushButton:hover { background:#475569; }'
+        )
+        close.clicked.connect(popup.accept)
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_row.addWidget(close)
+        layout.addLayout(btn_row)
+        popup.exec()
+
+    def _get_conf(self, idx: int):
+        native = self._native
+        backend = self._backend
+        lm3d = native.get('landmarks_3d', [])
+        if idx < len(lm3d) and len(lm3d[idx]) >= 4:
+            return float(lm3d[idx][3])
+        if backend == 'MEDIAPIPE':
+            lms = native.get('landmarks_2d', [])
+            if idx < len(lms) and len(lms[idx]) >= 3:
+                return float(lms[idx][2])
+        if backend == 'RTMW3D':
+            rtmw_idx = RTMW_TO_MEDIAPIPE.get(idx)
+            if rtmw_idx is not None:
+                scores_list = native.get('scores', [])
+                if rtmw_idx < len(scores_list):
+                    return float(scores_list[rtmw_idx])
+        return None
+
+    # ── Static helpers ────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _fmt_angle(v) -> str:
+        if v is None or v == 'NULL':
+            return 'NULL'
+        try:
+            return f'{float(v):.1f}°'
+        except (ValueError, TypeError):
+            return str(v)
+
+    @staticmethod
+    def _fmt_score(v) -> str:
+        if v is None or v == 'NULL':
+            return 'NULL'
+        return str(v)

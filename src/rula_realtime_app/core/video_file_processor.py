@@ -142,8 +142,9 @@ class VideoFileProcessor(QObject):
                             scores = native_draw_data.get('scores') or []
                             serializable_native_draw_data = {
                                 'backend': 'RTMW3D',
-                                'keypoints_2d_norm': [],
-                                'scores': [],
+                                'keypoints_2d_norm': [],  # 2D 原始模型關鍵點（用於繪圖）
+                                'scores': [],             # 2D 原始模型信心度（用於繪圖）
+                                'landmarks_3d': [],       # 3D 33點 MediaPipe映射（用於角度計算與信心度查詢）
                             }
                             for pt in kpts_norm:
                                 try:
@@ -161,15 +162,27 @@ class VideoFileProcessor(QObject):
                             lms = native_draw_data.get('landmarks_2d') or []
                             serializable_native_draw_data = {
                                 'backend': 'MEDIAPIPE',
-                                'landmarks_2d': [],
+                                'landmarks_2d': [],  # 2D 正規化座標 [x, y, visibility]（用於繪圖）
+                                'landmarks_3d': [],  # 3D 世界座標 [x, y, z, visibility]（用於角度計算與信心度查詢）
                             }
                             for lm in lms:
                                 try:
+                                    # landmarks_2d 格式為 [x, y, visibility]（3 個值）
                                     serializable_native_draw_data['landmarks_2d'].append([
-                                        float(lm[0]), float(lm[1]), float(lm[2])
+                                        float(lm[0]), float(lm[1]), float(lm[2]),
                                     ])
                                 except Exception:
                                     serializable_native_draw_data['landmarks_2d'].append([0.0, 0.0, 0.0])
+
+                    # 序列化 landmarks_3d（兩個 backend 統一格式：33點 MediaPipe映射，[x,y,z,conf]）
+                    if serializable_native_draw_data is not None and landmarks_arr:
+                        for lm in landmarks_arr:
+                            try:
+                                serializable_native_draw_data['landmarks_3d'].append([
+                                    float(lm[0]), float(lm[1]), float(lm[2]), float(lm[3])
+                                ])
+                            except Exception:
+                                serializable_native_draw_data['landmarks_3d'].append([0.0, 0.0, 0.0, 0.0])
 
                     records.append({
                         'frame':             frame_idx,
