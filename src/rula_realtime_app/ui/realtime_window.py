@@ -19,7 +19,6 @@ from datetime import datetime
 from ..core.camera_handler import CameraHandler
 from ..core.pose_detector import PoseDetector
 from ..core.realtime_processor import RealtimeProcessorWorker
-from ..core import angle_calc
 from ..core import config as core_config
 
 from .styles import *
@@ -65,10 +64,6 @@ class MainWindow(QMainWindow):
             self.pose_detector = None  # 由 RealtimeProcessorWorker 在背景執行緒建立
         else:
             self.pose_detector = PoseDetector(backend_mode='MEDIAPIPE')
-        
-        # RULA 計算用的前一幀資料
-        self.prev_left = None
-        self.prev_right = None
         
         # 當前影像
         self.current_frame = None
@@ -373,8 +368,6 @@ class MainWindow(QMainWindow):
 
         # 重置計數器和暫停狀態
         self.frame_counter = 0
-        self.prev_left = None
-        self.prev_right = None
         self.is_paused = False
         self.pause_button.setText(t('btn_pause'))
         

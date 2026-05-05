@@ -92,28 +92,84 @@ _SKELETON_CONNECTIONS = [
     (28, 32, '#ff6b6b'), (30, 32, '#ff6b6b'),
 ]
 
+# RTMW / COCO-WholeBody body-only connections (indices 0-16 = COCO-17)
+# COCO-17: 0=nose,1=l_eye,2=r_eye,3=l_ear,4=r_ear,5=l_sho,6=r_sho,
+#          7=l_elb,8=r_elb,9=l_wri,10=r_wri,11=l_hip,12=r_hip,
+#          13=l_kne,14=r_kne,15=l_ank,16=r_ank
+_RTMW_BODY_CONNECTIONS = [
+    # head
+    (0, 1, 'cyan'), (0, 2, 'cyan'), (1, 3, 'cyan'), (2, 4, 'cyan'),
+    # torso
+    (5, 6, 'yellow'), (5, 11, 'yellow'), (6, 12, 'yellow'), (11, 12, 'yellow'),
+    # left arm
+    (5, 7, '#4dabf7'), (7, 9, '#4dabf7'),
+    # right arm
+    (6, 8, '#ff6b6b'), (8, 10, '#ff6b6b'),
+    # left leg
+    (11, 13, '#4dabf7'), (13, 15, '#4dabf7'),
+    # right leg
+    (12, 14, '#ff6b6b'), (14, 16, '#ff6b6b'),
+]
+
 
 def _render_3d_skeleton_pixmap(landmarks_3d: list,
                                width: int = 340,
-                               height: int = 380) -> 'QPixmap | None':
+                               height: int = 380,
+                               native: dict = None) -> 'QPixmap | None':
     """
-    Render a 3D skeleton from landmarks_3d (33 × [x,y,z,conf]) into a QPixmap.
-    Returns None when landmarks_3d is empty or too short.
+    Render a 3D skeleton into a QPixmap.
+
+    For RTMW3D, uses ``native['keypoints_3d_raw']`` (all model joints + scores
+    from ``native['scores']``) with COCO-17 body connections.
+    Falls back to ``landmarks_3d`` (33-point MediaPipe format) otherwise.
+    Returns None when no usable data is present.
     """
     from io import BytesIO
-    if not landmarks_3d or len(landmarks_3d) < 33:
-        return None
 
-    arr = np.asarray(landmarks_3d, dtype=np.float64)
-    xs, ys, zs, vs = arr[:, 0], arr[:, 1], arr[:, 2], arr[:, 3]
+    # ── Choose data source ────────────────────────────────────────────────────
+    # For RTMW3D use the full raw 3D keypoints (all K model joints) so the
+    # skeleton shows the whole body, not just the 15 RULA-mapped points.
+    raw_3d = (native or {}).get('keypoints_3d_raw') or []
+    raw_scores = (native or {}).get('scores') or []
+
+    if raw_3d and len(raw_3d) >= 17:
+        # RTMW3D path — use raw model outputs
+        arr3 = np.asarray(raw_3d, dtype=np.float64)          # [K, 3]
+        sc   = np.asarray(raw_scores, dtype=np.float64)
+        if sc.shape[0] < arr3.shape[0]:
+            sc = np.pad(sc, (0, arr3.shape[0] - sc.shape[0]))
+
+        xs, ys, zs, vs = arr3[:, 0], arr3[:, 1], arr3[:, 2], sc
+        connections = _RTMW_BODY_CONNECTIONS
+    else:
+        # MediaPipe fallback
+        if not landmarks_3d or len(landmarks_3d) < 33:
+            return None
+        arr = np.asarray(landmarks_3d, dtype=np.float64)
+        xs, ys, zs, vs = arr[:, 0], arr[:, 1], arr[:, 2], arr[:, 3]
+        connections = _SKELETON_CONNECTIONS
+
+    # ── Normalise pixel-scale coordinates ────────────────────────────────────
+    # RTMW3D X/Y are in pixel space; Z uses a different (smaller) unit.
+    # Normalise so the plot is proportional regardless of backend.
+    _vis = vs > 0.3
+    if _vis.any() and max(np.ptp(xs[_vis]), np.ptp(ys[_vis])) > 5.0:
+        _xy_span = max(np.ptp(xs[_vis]), np.ptp(ys[_vis]))
+        _cx, _cy, _cz = xs[_vis].mean(), ys[_vis].mean(), zs[_vis].mean()
+        xs = (xs - _cx) / _xy_span
+        ys = (ys - _cy) / _xy_span
+        zs = (zs - _cz) / _xy_span
+        _z_rng  = np.ptp(zs[_vis])
+        _xy_rng = max(np.ptp(xs[_vis]), np.ptp(ys[_vis]))
+        if _z_rng < _xy_rng * 0.1 and _z_rng > 1e-6:
+            zs = zs * min(_xy_rng / _z_rng * 0.3, 10.0)
 
     dpi = 100
     fig = plt.figure(figsize=(width / dpi, height / dpi), dpi=dpi, facecolor='white')
     ax = fig.add_subplot(111, projection='3d', facecolor='white')
-    # Expand axes to fill more of the figure area and trim outer whitespace
-    fig.subplots_adjust(left=0.0, right=0.88, top=0.99, bottom=0.01)
+    fig.subplots_adjust(left=0.0, right=0.82, top=0.99, bottom=0.08)
 
-    for i, j, color in _SKELETON_CONNECTIONS:
+    for i, j, color in connections:
         if i < len(vs) and j < len(vs) and vs[i] > 0.3 and vs[j] > 0.3:
             # darken cyan/yellow for white bg readability
             c = {'cyan': '#0891b2', 'yellow': '#b45309'}.get(color, color)
@@ -124,7 +180,7 @@ def _render_3d_skeleton_pixmap(landmarks_3d: list,
 
     cmap = plt.cm.plasma
     norm = plt.Normalize(0.0, 1.0)
-    for k in range(min(33, len(vs))):
+    for k in range(len(vs)):
         if vs[k] > 0.3:
             ax.scatter(xs[k], zs[k], -ys[k],
                        color=cmap(norm(vs[k])), s=18, zorder=5, depthshade=False,
@@ -146,9 +202,9 @@ def _render_3d_skeleton_pixmap(landmarks_3d: list,
         axis.pane.set_edgecolor('#cbd5e1')
         axis._axinfo['grid']['color'] = '#e2e8f0'
 
-    ax.set_xlabel('X', fontsize=6, color='#334155')
-    ax.set_ylabel('Z', fontsize=6, color='#334155')
-    ax.set_zlabel('Y', fontsize=6, color='#334155')
+    ax.set_xlabel('X', fontsize=6, color='#334155', labelpad=2)
+    ax.set_ylabel('Z', fontsize=6, color='#334155', labelpad=2)
+    ax.set_zlabel('Y', fontsize=6, color='#334155', labelpad=2)
 
     # auto-fit axis limits from visible joints with a small margin
     _vis_mask = vs > 0.3
@@ -172,7 +228,7 @@ def _render_3d_skeleton_pixmap(landmarks_3d: list,
     ax.view_init(elev=10, azim=-65)
 
     buf = BytesIO()
-    fig.savefig(buf, format='png', bbox_inches='tight', pad_inches=0.02,
+    fig.savefig(buf, format='png', bbox_inches='tight', pad_inches=0.2,
                 facecolor=fig.get_facecolor(), dpi=dpi)
     plt.close(fig)
     buf.seek(0)
@@ -805,25 +861,41 @@ class ResultWindow(QMainWindow):
             frame_rgb = _frame_rgb_from_video(self._cap, rec['frame'])
 
         if frame_rgb is not None:
-            if self._show_skeleton:
-                native = rec.get('native_draw_data')
+            native = rec.get('native_draw_data')
 
-                if isinstance(native, dict):
-                    backend = str(native.get('backend', self._backend_mode)).upper()
-                    if backend == 'RTMW3D':
-                        keypoints_2d_norm = native.get('keypoints_2d_norm') or []
-                        scores = native.get('scores') or []
-                        if keypoints_2d_norm and scores:
-                            frame_rgb = _draw_rtmw_skeleton(
-                                frame_rgb,
-                                keypoints_2d_norm,
-                                scores,
-                                kpt_threshold=0.3,
-                            )
-                    elif backend == 'MEDIAPIPE':
-                        lms = native.get('landmarks_2d') or []
-                        if lms:
-                            frame_rgb = _draw_mediapipe_skeleton(frame_rgb, lms)
+            if self._show_skeleton and isinstance(native, dict):
+                backend = str(native.get('backend', self._backend_mode)).upper()
+                if backend == 'RTMW3D':
+                    keypoints_2d_norm = native.get('keypoints_2d_norm') or []
+                    scores = native.get('scores') or []
+                    if keypoints_2d_norm and scores:
+                        frame_rgb = _draw_rtmw_skeleton(
+                            frame_rgb,
+                            keypoints_2d_norm,
+                            scores,
+                            kpt_threshold=0.3,
+                        )
+                elif backend == 'MEDIAPIPE':
+                    lms = native.get('landmarks_2d') or []
+                    if lms:
+                        frame_rgb = _draw_mediapipe_skeleton(frame_rgb, lms)
+
+            # ── Occlusion overlay (MediaPipe only) ────────────────────────
+            joint_occlusion = rec.get('joint_occlusion')
+            if (joint_occlusion and isinstance(native, dict)
+                    and str(native.get('backend', '')).upper() == 'MEDIAPIPE'):
+                lms_2d = native.get('landmarks_2d') or []
+                h_fr, w_fr = frame_rgb.shape[:2]
+                for i, reliable in enumerate(joint_occlusion):
+                    if not reliable and i < len(lms_2d) and len(lms_2d[i]) >= 2:
+                        cx = int(lms_2d[i][0] * w_fr)
+                        cy = int(lms_2d[i][1] * h_fr)
+                        # 橘紅色 X 標記（外框白色增加對比）
+                        d = 8
+                        cv2.line(frame_rgb, (cx-d, cy-d), (cx+d, cy+d), (255, 255, 255), 4)
+                        cv2.line(frame_rgb, (cx+d, cy-d), (cx-d, cy+d), (255, 255, 255), 4)
+                        cv2.line(frame_rgb, (cx-d, cy-d), (cx+d, cy+d), (255, 80, 0),   2)
+                        cv2.line(frame_rgb, (cx+d, cy-d), (cx-d, cy+d), (255, 80, 0),   2)
             score = rec.get('best_score')
             txt   = f"RULA: {score if score is not None else 'NULL'}"
             cv2.putText(frame_rgb, txt, (10, 32),

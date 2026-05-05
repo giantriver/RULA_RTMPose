@@ -93,6 +93,7 @@ class PoseDetector:
         self.last_keypoints_2d = None
         self.last_scores = None
         self.last_target_bbox = None
+        self.last_raw_3d = None       # raw RTMW3D 3D keypoints [K, 3+] for selected person
 
         self.pose = None
         self.pose_tracker = None
@@ -327,6 +328,8 @@ class PoseDetector:
 
         self.last_keypoints_2d = np.asarray(keypoints_2d)
         self.last_scores = np.asarray(scores)
+        # Store raw 3D for full-body rendering (all K keypoints, not just 33 mapped ones)
+        self.last_raw_3d = selected_3d  # None if model returned no 3D
         return True
 
     def get_native_draw_data_2d(self):
@@ -370,10 +373,18 @@ class PoseDetector:
                 conf = max(0.0, min(1.0, float(selected_sc[i])))
                 scores.append(conf)
 
+            # Build raw_3d list: [[x, y, z], ...] for all K joints
+            raw_3d = []
+            if self.last_raw_3d is not None:
+                r3d = np.asarray(self.last_raw_3d)
+                for i in range(r3d.shape[0]):
+                    raw_3d.append([float(r3d[i, 0]), float(r3d[i, 1]), float(r3d[i, 2])])
+
             return {
                 'backend': 'RTMW3D',
                 'keypoints_2d_norm': kpts_norm,
                 'scores': scores,
+                'keypoints_3d_raw': raw_3d,  # full raw 3D from model (len == K)
             }
 
         if self.results is None or self.results.pose_landmarks is None:

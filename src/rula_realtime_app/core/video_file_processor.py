@@ -16,6 +16,53 @@ from . import angle_calc
 from .utils import get_best_rula_score
 from .config import RULA_CONFIG
 
+# ── Occlusion detection constants (MediaPipe world-coordinate space) ──────────
+# 預設值，未來透過實驗校正
+_OCC_VIS_TH       = 0.50   # visibility 低於此值 → 直接不可靠
+_OCC_VIS_MID_TH   = 0.80   # visibility 中間帶
+_OCC_SPEED_TH_LOW  = 3.0   # 正規化速度門檻（中）：中等 visibility 時觸發
+_OCC_SPEED_TH_HIGH = 10.0  # 正規化速度門檻（極端）：任何 visibility 都觸發
+
+
+def _compute_occlusion_mask(landmarks_arr, prev_reliable, body_scale, dt):
+    """
+    判斷 MediaPipe 33 個關節點是否可靠（非遮擋）。
+
+    Args:
+        landmarks_arr:  33 × [x, y, z, vis]，MediaPipe world coordinates
+        prev_reliable:  list[list|None]，每個關節上一個可靠幀的 [x, y, z]
+        body_scale:     人體尺度參考（肩寬），用來正規化速度
+        dt:             兩個分析幀之間的實際時間差（秒）
+
+    Returns:
+        mask (list[bool]):         True = 可靠，False = 疑似遮擋
+        new_prev (list[list|None]): 更新後的 prev_reliable（只更新可靠的關節）
+    """
+    mask = []
+    new_prev = list(prev_reliable)
+
+    for i, lm in enumerate(landmarks_arr):
+        x, y, z, vis = float(lm[0]), float(lm[1]), float(lm[2]), float(lm[3])
+        reliable = True
+
+        if vis < _OCC_VIS_TH:
+            reliable = False
+        else:
+            prev = prev_reliable[i]
+            if prev is not None and dt > 1e-9 and body_scale > 1e-6:
+                jump = ((x - prev[0])**2 + (y - prev[1])**2 + (z - prev[2])**2) ** 0.5
+                speed_ratio = (jump / dt) / body_scale
+                if speed_ratio > _OCC_SPEED_TH_HIGH:
+                    reliable = False
+                elif vis < _OCC_VIS_MID_TH and speed_ratio > _OCC_SPEED_TH_LOW:
+                    reliable = False
+
+        mask.append(reliable)
+        if reliable:
+            new_prev[i] = [x, y, z]
+
+    return mask, new_prev
+
 
 class VideoFileProcessor(QObject):
     """
@@ -96,6 +143,10 @@ class VideoFileProcessor(QObject):
             frame_idx  = 0
             preview_every = max(1, self.frame_interval * 5)  # 每 5 個取樣幀更新一次預覽
 
+            # Occlusion detection state (MediaPipe only)
+            _occ_prev_reliable = [None] * 33  # 每個關節上一個可靠幀的 [x, y, z]
+            _occ_dt = self.frame_interval / fps  # 兩個分析幀的時間差（秒）
+
             while not self._cancelled:
                 ret, frame = cap.read()
                 if not ret:
@@ -110,6 +161,7 @@ class VideoFileProcessor(QObject):
                     landmarks_arr = None
 
                     native_draw_data = None
+                    joint_occlusion  = None
                     if detected:
                         landmarks_arr    = detector.get_landmarks_array()
                         native_draw_data = detector.get_native_draw_data_2d()
@@ -118,6 +170,18 @@ class VideoFileProcessor(QObject):
                         )
                         prev_left  = rula_left
                         prev_right = rula_right
+
+                        # Occlusion detection (MediaPipe only)
+                        if self.backend_mode == 'MEDIAPIPE' and landmarks_arr and len(landmarks_arr) == 33:
+                            L_SHO, R_SHO = landmarks_arr[11], landmarks_arr[12]
+                            body_scale = (
+                                (L_SHO[0]-R_SHO[0])**2 +
+                                (L_SHO[1]-R_SHO[1])**2 +
+                                (L_SHO[2]-R_SHO[2])**2
+                            ) ** 0.5
+                            joint_occlusion, _occ_prev_reliable = _compute_occlusion_mask(
+                                landmarks_arr, _occ_prev_reliable, body_scale, _occ_dt
+                            )
 
                         # 偶爾發送預覽畫面
                         if frame_idx % preview_every == 0:
@@ -141,11 +205,13 @@ class VideoFileProcessor(QObject):
                         if backend_name == 'RTMW3D':
                             kpts_norm = native_draw_data.get('keypoints_2d_norm') or []
                             scores = native_draw_data.get('scores') or []
+                            raw_3d = native_draw_data.get('keypoints_3d_raw') or []
                             serializable_native_draw_data = {
                                 'backend': 'RTMW3D',
                                 'keypoints_2d_norm': [],  # 2D 原始模型關鍵點（用於繪圖）
                                 'scores': [],             # 2D 原始模型信心度（用於繪圖）
                                 'landmarks_3d': [],       # 3D 33點 MediaPipe映射（用於角度計算與信心度查詢）
+                                'keypoints_3d_raw': [],   # 全身 raw 3D [K × [x,y,z]]（用於3D骨架繪圖）
                             }
                             for pt in kpts_norm:
                                 try:
@@ -159,6 +225,13 @@ class VideoFileProcessor(QObject):
                                     serializable_native_draw_data['scores'].append(float(sc))
                                 except Exception:
                                     serializable_native_draw_data['scores'].append(0.0)
+                            for pt3 in raw_3d:
+                                try:
+                                    serializable_native_draw_data['keypoints_3d_raw'].append([
+                                        float(pt3[0]), float(pt3[1]), float(pt3[2])
+                                    ])
+                                except Exception:
+                                    serializable_native_draw_data['keypoints_3d_raw'].append([0.0, 0.0, 0.0])
                         elif backend_name == 'MEDIAPIPE':
                             lms = native_draw_data.get('landmarks_2d') or []
                             serializable_native_draw_data = {
@@ -209,6 +282,8 @@ class VideoFileProcessor(QObject):
                         'right_posture_score_b': rula_right.get('posture_score_b', 'NULL') if rula_right else 'NULL',
                         # 原生繪圖資料（保存所有關節，供歷史重播）
                         'native_draw_data':  serializable_native_draw_data,
+                        # 遮擋判定結果（MediaPipe only）：33 個 bool，True=可靠 False=疑似遮擋
+                        'joint_occlusion':   joint_occlusion,
                     })
 
                     # 進度（5% ~ 95%）

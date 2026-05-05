@@ -485,7 +485,7 @@ class FrameMetricsDialog(QDialog):
         col.addWidget(img_lbl)
 
         lm3d = self._native.get('landmarks_3d', [])
-        pixmap = self._render_3d_fn(lm3d, w, h)
+        pixmap = self._render_3d_fn(lm3d, w, h, self._native)
         if pixmap is not None:
             img_lbl.setPixmap(
                 pixmap.scaled(w, h,
